@@ -1,7 +1,7 @@
 [project]
 name = "studio_inventory"
 authors = [{ name = "Tyler Miller" }]
-description = "Scanner-first inventory workflows backed by native ERPNext transactions"
+description = "Studio inventory and print-pricing workflows backed by native ERPNext records"
 requires-python = ">=3.10"
 readme = "README.md"
 dynamic = ["version"]

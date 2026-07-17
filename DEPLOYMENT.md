@@ -59,7 +59,32 @@ bench --site <site-name> migrate
 After installation, open `/studio-inventory` or choose Studio Inventory from
 the Frappe app switcher.
 
-## 4. Assign native permissions
+## 4. Configure print pricing
+
+Open `Studio Pricing Settings` and set:
+
+- Company
+- Default Print Item
+- Paper Cost Price List, normally `Standard Buying`
+- pricing constants and warning threshold
+
+The Default Print Item should be an active sellable Item without variants. It
+can be a non-stock service Item such as `Custom Fine Art Print`; paper remains
+raw inventory and is not sold on the Quotation.
+
+Add a valid Buying Item Price for each quotable Paper Item and purchase UOM.
+For example, a $100 `Roll 50 Foot` price is normalized through its conversion
+factor to a Foot cost and then through the variant's `Roll Width` to cost per
+square inch. A `Pack 25 Sheet` price is normalized through the Sheet Size and
+pack conversion. Merchant URL and Price Last Verified are optional fields on
+Item Price.
+
+If Frappe CRM is installed, run migrate after installing the app. The migration
+adds the CRM Deal quotation link and **Create Print Quotation** action. Leave
+Frappe CRM's full ERPNext integration disabled unless its Item-to-Product sync
+policy is acceptable for the site.
+
+## 5. Assign native permissions
 
 The app deliberately relies on ERPNext's own permissions. Give operators only
 the actions they need:
@@ -70,11 +95,14 @@ the actions they need:
 | Consume | Stock Entry | Create, Submit |
 | Count | Stock Reconciliation | Create, Submit |
 | Quick undo | The created native document | Cancel |
+| Calculated quote | Quotation | Create, Read, Write, Submit |
+| Quote to order | Sales Order and Customer | Create; Customer create when needed |
 
 Read permission and User Permissions must also allow the selected Company,
-Warehouse, Item, Batch, and Supplier. The app does not use `ignore_permissions`.
+Warehouse, Item, Item Price, Batch, and Supplier. The app does not bypass
+transaction or Customer permissions.
 
-## 5. Configure the scanner and labels
+## 6. Configure the scanner and labels
 
 - Use a 1D/2D scanner in Bluetooth, USB, or 2.4G HID keyboard mode.
 - Configure a carriage-return/Enter suffix.
@@ -83,7 +111,7 @@ Warehouse, Item, Batch, and Supplier. The app does not use `ignore_permissions`.
 - No ERPNext mobile app, browser extension, or scanner SDK is required; the
   responsive web page works in a signed-in mobile browser.
 
-## 6. Run the live smoke test
+## 7. Run the live smoke test
 
 Use a temporary test Warehouse or clearly marked test Items before touching
 real balances.
@@ -99,6 +127,11 @@ real balances.
    cancelled, not deleted.
 7. Confirm Stock Ledger and accounting entries match the submitted native
    documents.
+8. From a CRM Deal, create a print Quotation and add two calculated print lines.
+9. Confirm taxes, discounts, terms, and the customer print format remain native
+   ERPNext behavior.
+10. Submit the Quotation, make a Sales Order, and confirm the CRM Deal link and
+    calculated print specification carry forward.
 
 Do not run this smoke test against live inventory until the site owner
 explicitly approves production writes.

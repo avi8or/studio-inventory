@@ -1,0 +1,179 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "company",
+  "default_print_item",
+  "paper_cost_price_list",
+  "pricing_section",
+  "hourly_rate",
+  "ink_cost_per_sq_in",
+  "material_markup",
+  "unit_price_rounding",
+  "production_section",
+  "production_base",
+  "production_first_rate",
+  "production_large_rate",
+  "production_breakpoint_sq_in",
+  "minimums_section",
+  "minimum_price_4x6",
+  "minimum_price_5x7",
+  "minimum_price_8x10",
+  "low_margin_threshold_pct",
+  "consumption_section",
+  "roll_consumption_increment_ft"
+ ],
+ "fields": [
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+   "description": "A non-stock sellable Item used for calculated custom-print quotation lines.",
+   "fieldname": "default_print_item",
+   "fieldtype": "Link",
+   "label": "Default Print Item",
+   "options": "Item"
+  },
+  {
+   "default": "Standard Buying",
+   "description": "Valid Item Prices in this Buying Price List are normalized to a paper cost per square inch.",
+   "fieldname": "paper_cost_price_list",
+   "fieldtype": "Link",
+   "label": "Paper Cost Price List",
+   "options": "Price List",
+   "reqd": 1
+  },
+  {
+   "fieldname": "pricing_section",
+   "fieldtype": "Section Break",
+   "label": "Pricing"
+  },
+  {
+   "default": "75",
+   "fieldname": "hourly_rate",
+   "fieldtype": "Currency",
+   "label": "Internal Hourly Cost"
+  },
+  {
+   "default": "0.012",
+   "fieldname": "ink_cost_per_sq_in",
+   "fieldtype": "Currency",
+   "label": "Ink Cost per Square Inch",
+   "precision": "6"
+  },
+  {
+   "default": "2",
+   "fieldname": "material_markup",
+   "fieldtype": "Float",
+   "label": "Material Markup Multiplier"
+  },
+  {
+   "default": "1",
+   "fieldname": "unit_price_rounding",
+   "fieldtype": "Currency",
+   "label": "Unit Price Rounding"
+  },
+  {
+   "fieldname": "production_section",
+   "fieldtype": "Section Break",
+   "label": "Production Allowance"
+  },
+  {
+   "default": "2",
+   "fieldname": "production_base",
+   "fieldtype": "Currency",
+   "label": "Base Allowance"
+  },
+  {
+   "default": "0.075",
+   "fieldname": "production_first_rate",
+   "fieldtype": "Currency",
+   "label": "First-Tier Rate per Square Inch",
+   "precision": "6"
+  },
+  {
+   "default": "0.055",
+   "fieldname": "production_large_rate",
+   "fieldtype": "Currency",
+   "label": "Large-Print Rate per Square Inch",
+   "precision": "6"
+  },
+  {
+   "default": "320",
+   "fieldname": "production_breakpoint_sq_in",
+   "fieldtype": "Float",
+   "label": "Large-Print Breakpoint (sq in)"
+  },
+  {
+   "fieldname": "minimums_section",
+   "fieldtype": "Section Break",
+   "label": "Minimums and Guardrails"
+  },
+  {
+   "default": "4",
+   "fieldname": "minimum_price_4x6",
+   "fieldtype": "Currency",
+   "label": "Minimum 4 × 6 Price"
+  },
+  {
+   "default": "6",
+   "fieldname": "minimum_price_5x7",
+   "fieldtype": "Currency",
+   "label": "Minimum 5 × 7 Price"
+  },
+  {
+   "default": "8",
+   "fieldname": "minimum_price_8x10",
+   "fieldtype": "Currency",
+   "label": "Minimum 8 × 10 Price"
+  },
+  {
+   "default": "35",
+   "fieldname": "low_margin_threshold_pct",
+   "fieldtype": "Percent",
+   "label": "Low-Margin Warning Below"
+  },
+  {
+   "fieldname": "consumption_section",
+   "fieldtype": "Section Break",
+   "label": "Inventory Estimate"
+  },
+  {
+   "default": "1",
+   "description": "Estimated roll use is rounded up to this many feet; actual consumption remains editable at fulfillment.",
+   "fieldname": "roll_consumption_increment_ft",
+   "fieldtype": "Float",
+   "label": "Roll Length Increment (ft)"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "module": "Studio Inventory",
+ "name": "Studio Pricing Settings",
+ "permissions": [
+  {
+   "create": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Sales Manager",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Sales User"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

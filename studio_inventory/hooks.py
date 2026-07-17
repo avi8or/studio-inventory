@@ -1,7 +1,7 @@
 app_name = "studio_inventory"
 app_title = "Studio Inventory"
 app_publisher = "Tyler Miller"
-app_description = "Scanner-first inventory workflows backed by native ERPNext transactions"
+app_description = "Studio inventory and print-pricing workflows backed by native ERPNext records"
 app_email = ""
 app_license = "MIT"
 
@@ -23,3 +23,20 @@ website_route_rules = [
 
 export_python_type_annotations = True
 require_type_annotated_api_methods = True
+
+after_install = "studio_inventory.setup.install"
+after_migrate = "studio_inventory.setup.after_migrate"
+
+doctype_js = {
+	"Quotation": "public/js/quotation.js",
+	"Sales Order": "public/js/sales_order.js",
+}
+
+doc_events = {
+	"Quotation": {
+		"validate": "studio_inventory.pricing_api.validate_quotation",
+	},
+	"Sales Order": {
+		"before_validate": "studio_inventory.crm_bridge.ensure_customer_from_quotation",
+	},
+}
