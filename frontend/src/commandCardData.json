@@ -1,0 +1,32 @@
+{
+  "appPath": "/studio-inventory",
+  "modes": [
+    { "label": "Receive", "detail": "Purchased stock", "mode": "receive" },
+    { "label": "Consume", "detail": "Material used", "mode": "consume" },
+    { "label": "Count", "detail": "Set actual balance", "mode": "count" }
+  ],
+  "entryModes": [
+    { "label": "Amount used", "code": "SI:E:A" },
+    { "label": "Ending balance", "code": "SI:E:R" }
+  ],
+  "keys": [
+    { "label": "7", "code": "SI:K:7" },
+    { "label": "8", "code": "SI:K:8" },
+    { "label": "9", "code": "SI:K:9" },
+    { "label": "Backspace", "code": "SI:K:B" },
+    { "label": "4", "code": "SI:K:4" },
+    { "label": "5", "code": "SI:K:5" },
+    { "label": "6", "code": "SI:K:6" },
+    { "label": "Clear", "code": "SI:K:C" },
+    { "label": "1", "code": "SI:K:1" },
+    { "label": "2", "code": "SI:K:2" },
+    { "label": "3", "code": "SI:K:3" },
+    { "label": "Decimal", "code": "SI:K:." },
+    { "label": "0", "code": "SI:K:0", "wide": true }
+  ],
+  "actions": [
+    { "label": "Confirm", "detail": "Submit to ERPNext", "code": "SI:A:OK", "tone": "confirm" },
+    { "label": "Cancel", "detail": "Discard prepared entry", "code": "SI:A:X", "tone": "cancel" },
+    { "label": "Undo", "detail": "Cancel latest transaction", "code": "SI:A:UNDO", "tone": "undo" }
+  ]
+}

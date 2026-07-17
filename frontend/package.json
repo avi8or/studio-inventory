@@ -1,0 +1,27 @@
+{
+  "name": "studio-inventory-ui",
+  "private": true,
+  "version": "0.1.0",
+  "author": "Tyler Miller",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build --base=/assets/studio_inventory/frontend/",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-vue": "^5.2.4",
+    "@lucide/vue": "^1.25.0",
+    "frappe-ui": "1.0.0-beta.19",
+    "jsbarcode": "^3.11.6",
+    "qrcode": "^1.5.4",
+    "vite": "^5.4.21",
+    "vue": "^3.5.13",
+    "vue-router": "^4.1.6"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.15"
+  }
+}

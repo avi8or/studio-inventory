@@ -1,0 +1,14 @@
+{
+  "name": "studio-inventory",
+  "private": true,
+  "author": "Tyler Miller",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "yarn@1.22.22",
+  "scripts": {
+    "postinstall": "cd frontend && yarn install --check-files",
+    "build": "cd frontend && yarn build",
+    "dev": "cd frontend && yarn dev",
+    "test": "python3 -m unittest discover -s tests -v"
+  }
+}
