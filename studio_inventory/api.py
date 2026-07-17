@@ -6,7 +6,7 @@ from typing import Any
 import frappe
 from frappe import _
 from frappe.model.naming import make_autoname
-from frappe.utils import flt, now_datetime, nowdate, nowtime, time_diff_in_minutes
+from frappe.utils import flt, now_datetime, nowdate, nowtime
 
 from studio_inventory.domain import (
 	DomainError,
@@ -515,7 +515,7 @@ def cancel_transaction(voucher_type: str, voucher_no: str) -> dict:
 		frappe.throw(_("Only a submitted transaction can be cancelled."), frappe.ValidationError)
 	if doc.owner != frappe.session.user:
 		frappe.throw(_("Only the user who created this app transaction can undo it."), frappe.PermissionError)
-	if time_diff_in_minutes(now_datetime(), doc.creation) > 15:
+	if (now_datetime() - doc.creation).total_seconds() > 15 * 60:
 		frappe.throw(_("The 15-minute quick-undo window has expired. Cancel the document from ERPNext instead."))
 	marker = frappe.db.exists(
 		"Comment",
