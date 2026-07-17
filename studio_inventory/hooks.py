@@ -18,6 +18,7 @@ add_to_apps_screen = [
 ]
 
 website_route_rules = [
+	{"from_route": "/studio-inventory", "to_route": "studio_inventory"},
 	{"from_route": "/studio-inventory/<path:app_path>", "to_route": "studio_inventory"},
 ]
 
