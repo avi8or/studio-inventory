@@ -39,6 +39,15 @@ class ApiImportTests(unittest.TestCase):
 		with patch.dict(sys.modules, modules):
 			spec.loader.exec_module(module)
 
+		warehouses = [
+			types.SimpleNamespace(name="Finished Goods - LPS", warehouse_name="Finished Goods", company="Lightpress"),
+			types.SimpleNamespace(name="Stores - LPS", warehouse_name="Stores", company="Lightpress"),
+		]
+		self.assertEqual(
+			module._select_default_warehouse(warehouses, "Lightpress", "Finished Goods - LPS"),
+			"Stores - LPS",
+		)
+
 
 if __name__ == "__main__":
 	unittest.main()

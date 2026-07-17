@@ -128,12 +128,24 @@ def _result(doc, *, item, warehouse: str, batch_no: str | None, before: float, c
 	}
 
 
+def _select_default_warehouse(warehouses, default_company: str | None, user_default: str | None) -> str | None:
+	company_warehouses = [
+		warehouse for warehouse in warehouses if not default_company or warehouse.company == default_company
+	]
+	for warehouse in company_warehouses:
+		if (warehouse.warehouse_name or "").strip().casefold() == "stores":
+			return warehouse.name
+	if user_default and any(warehouse.name == user_default for warehouse in company_warehouses):
+		return user_default
+	return company_warehouses[0].name if company_warehouses else None
+
+
 @frappe.whitelist(methods=["POST"])
 def get_options() -> dict:
 	warehouses = frappe.get_list(
 		"Warehouse",
 		filters={"is_group": 0, "disabled": 0},
-		fields=["name", "company"],
+		fields=["name", "warehouse_name", "company"],
 		order_by="name asc",
 		limit_page_length=500,
 	)
@@ -145,12 +157,11 @@ def get_options() -> dict:
 		limit_page_length=250,
 	)
 	default_company = frappe.defaults.get_user_default("Company") or frappe.defaults.get_global_default("company")
-	default_warehouse = frappe.defaults.get_user_default("Warehouse")
-	if not default_warehouse:
-		for warehouse in warehouses:
-			if not default_company or warehouse.company == default_company:
-				default_warehouse = warehouse.name
-				break
+	default_warehouse = _select_default_warehouse(
+		warehouses,
+		default_company,
+		frappe.defaults.get_user_default("Warehouse"),
+	)
 
 	return {
 		"warehouses": warehouses,
