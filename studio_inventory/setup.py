@@ -6,6 +6,8 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 
+from studio_inventory.navigation import ensure_stock_workspace_link
+
 
 CRM_FORM_SCRIPT_NAME = "Create Print Quotation"
 
@@ -22,6 +24,7 @@ def _apply_setup() -> None:
 	_create_fields()
 	_enable_crm_deal_quotations()
 	_create_crm_form_script()
+	ensure_stock_workspace_link()
 
 
 def _create_fields() -> None:
