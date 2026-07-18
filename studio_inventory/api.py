@@ -633,15 +633,32 @@ def _get_all_list(doctype: str, *, page_length: int = 500, **kwargs) -> list:
 @frappe.whitelist(methods=["POST"])
 def get_inventory_labels(warehouse: str) -> list[dict]:
 	_warehouse_company(warehouse)
-	batches = _get_all_list(
-		"Batch",
-		filters={"disabled": 0},
-		fields=["name", "item", "creation"],
-		order_by="creation desc",
+	roll_items = _get_all_list(
+		"Item",
+		filters={
+			"disabled": 0,
+			"is_stock_item": 1,
+			"has_batch_no": 1,
+			"has_variants": 0,
+			"stock_uom": "Foot",
+		},
+		fields=["name", "item_name", "stock_uom"],
+		order_by="item_name asc",
 	)
+	roll_items_by_code = {item.name: item for item in roll_items}
+	batches = []
+	if roll_items_by_code:
+		batches = _get_all_list(
+			"Batch",
+			filters={"disabled": 0, "item": ("in", list(roll_items_by_code))},
+			fields=["name", "item", "creation"],
+			order_by="creation desc",
+		)
 	labels = []
 	for batch in batches:
-		item = _item(batch.item)
+		item = roll_items_by_code.get(batch.item)
+		if not item:
+			continue
 		quantity = _balance(item.name, warehouse, batch.name)
 		if quantity <= 0:
 			continue
@@ -665,11 +682,10 @@ def get_inventory_labels(warehouse: str) -> list[dict]:
 			"has_batch_no": 0,
 			"stock_uom": ("in", ["Sheet", "Card Set"]),
 		},
-		fields=["name"],
+		fields=["name", "item_name", "stock_uom"],
 		order_by="item_name asc",
 	)
-	for row in sheet_items:
-		item = _item(row.name)
+	for item in sheet_items:
 		labels.append(
 			{
 				"label_code": item.name,

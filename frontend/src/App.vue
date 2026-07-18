@@ -216,8 +216,14 @@ async function loadActivity() {
 
 async function loadLabels() {
   if (!form.warehouse) return;
-  labels.value = await call("get_inventory_labels", { warehouse: form.warehouse });
-  selectedLabelCodes.value = [];
+  try {
+    labels.value = await call("get_inventory_labels", { warehouse: form.warehouse });
+    selectedLabelCodes.value = [];
+  } catch (error) {
+    labels.value = [];
+    selectedLabelCodes.value = [];
+    toast.value = { title: "Labels unavailable", message: apiError(error) };
+  }
 }
 
 async function openLabels(codes = []) {
