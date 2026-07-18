@@ -48,6 +48,23 @@ class ApiImportTests(unittest.TestCase):
 			"Stores - LPS",
 		)
 
+		pages = {
+			0: [types.SimpleNamespace(name="ITEM-001"), types.SimpleNamespace(name="ITEM-002")],
+			2: [types.SimpleNamespace(name="ITEM-003")],
+		}
+		calls = []
+
+		def get_list(doctype, *, limit_start, limit_page_length, **kwargs):
+			calls.append((doctype, limit_start, limit_page_length, kwargs))
+			return pages[limit_start]
+
+		frappe.get_list = get_list
+		self.assertEqual(
+			[row.name for row in module._get_all_list("Item", page_length=2, fields=["name"])],
+			["ITEM-001", "ITEM-002", "ITEM-003"],
+		)
+		self.assertEqual([call[1] for call in calls], [0, 2])
+
 
 if __name__ == "__main__":
 	unittest.main()

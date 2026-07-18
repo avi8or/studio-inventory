@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   Clock3,
+  ExternalLink,
   History,
   Info,
   Menu,
@@ -25,6 +26,7 @@ import {
 } from "@lucide/vue";
 import BarcodeSvg from "./BarcodeSvg.vue";
 import ScannerCommandCard from "./ScannerCommandCard.vue";
+import { filterLabels, toggleVisibleSelection } from "./labelCatalog.js";
 import {
   applyNumericKey,
   inventoryModeFromUrl,
@@ -76,6 +78,7 @@ const saving = ref(false);
 const activity = ref([]);
 const labels = ref([]);
 const selectedLabelCodes = ref([]);
+const labelQuery = ref("");
 const activityQuery = ref("");
 const toast = ref(null);
 const lastTransaction = ref(null);
@@ -148,6 +151,26 @@ const filteredActivity = computed(() => {
   );
 });
 
+const filteredLabels = computed(() => filterLabels(labels.value, labelQuery.value));
+
+const allFilteredLabelsSelected = computed(
+  () =>
+    filteredLabels.value.length > 0 &&
+    filteredLabels.value.every((label) => selectedLabelCodes.value.includes(label.label_code)),
+);
+
+const printableLabels = computed(() =>
+  labels.value.filter((label) => selectedLabelCodes.value.includes(label.label_code)),
+);
+
+const printableLabelPages = computed(() => {
+  const pages = [];
+  for (let start = 0; start < printableLabels.value.length; start += 10) {
+    pages.push(printableLabels.value.slice(start, start + 10));
+  }
+  return pages;
+});
+
 function formatNumber(value) {
   return Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 3 });
 }
@@ -193,7 +216,7 @@ async function loadActivity() {
 
 async function loadLabels() {
   if (!form.warehouse) return;
-  labels.value = await call("get_inventory_labels", { warehouse: form.warehouse, limit: 100 });
+  labels.value = await call("get_inventory_labels", { warehouse: form.warehouse });
   selectedLabelCodes.value = [];
 }
 
@@ -445,8 +468,7 @@ function printCommandCard() {
 }
 
 function toggleAllLabels() {
-  selectedLabelCodes.value =
-    selectedLabelCodes.value.length === labels.value.length ? [] : labels.value.map((label) => label.label_code);
+  selectedLabelCodes.value = toggleVisibleSelection(selectedLabelCodes.value, filteredLabels.value);
 }
 
 onMounted(async () => {
@@ -466,12 +488,25 @@ onMounted(async () => {
     <div class="mobile-scrim" :class="{ open: mobileOpen }" @click="mobileOpen = false" />
     <aside class="sidebar" :class="{ 'mobile-open': mobileOpen, collapsed: sidebarCollapsed }">
       <div class="sidebar-account">
-        <div class="app-mark"><PackageOpen :size="18" :stroke-width="1.7" /></div>
-        <div class="account-copy">
-          <strong>Studio Inventory</strong>
-          <span>Native ERPNext stock</span>
-        </div>
-        <ChevronDown class="account-chevron" :size="14" />
+        <details class="app-menu">
+          <summary aria-label="Open ERPNext inventory links">
+            <div class="app-mark"><PackageOpen :size="18" :stroke-width="1.7" /></div>
+            <div class="account-copy">
+              <strong>Studio Inventory</strong>
+              <span>Native ERPNext stock</span>
+            </div>
+            <ChevronDown class="account-chevron" :size="14" />
+          </summary>
+          <div class="app-menu-popover" role="menu">
+            <strong>Open in ERPNext</strong>
+            <a href="/app/stock" role="menuitem"><span>Stock workspace</span><ExternalLink :size="13" /></a>
+            <a href="/app/item" role="menuitem"><span>Items &amp; barcodes</span><ExternalLink :size="13" /></a>
+            <a href="/app/batch" role="menuitem"><span>Batches</span><ExternalLink :size="13" /></a>
+            <a href="/app/purchase-receipt" role="menuitem"><span>Purchase Receipts</span><ExternalLink :size="13" /></a>
+            <a href="/app/stock-entry" role="menuitem"><span>Stock Entries</span><ExternalLink :size="13" /></a>
+            <a href="/app/stock-reconciliation" role="menuitem"><span>Stock Reconciliations</span><ExternalLink :size="13" /></a>
+          </div>
+        </details>
         <button class="icon-button mobile-close" type="button" aria-label="Close navigation" @click="mobileOpen = false"><X :size="16" /></button>
       </div>
 
@@ -492,7 +527,7 @@ onMounted(async () => {
       <div class="sidebar-footer">
         <div class="scanner-status">
           <span class="status-dot" />
-          <div><strong>Scanner ready</strong><span>Bluetooth HID · Enter suffix</span></div>
+          <div><strong>Barcode input</strong><span>Type a code or connect an HID scanner</span></div>
         </div>
         <button class="nav-link collapse-link" type="button" :aria-label="sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'" @click="sidebarCollapsed = !sidebarCollapsed"><PanelLeftClose :size="16" /><span>Collapse</span></button>
       </div>
@@ -556,18 +591,32 @@ onMounted(async () => {
         </div>
 
         <div v-else class="list-page labels-page">
-          <div class="filter-row">
-            <div class="page-description"><strong>Inventory labels</strong><span>Roll labels identify Batches; reusable sheet/card labels identify Items.</span></div>
-            <div class="label-actions"><button class="button subtle" type="button" :disabled="!labels.length" @click="toggleAllLabels">{{ selectedLabelCodes.length === labels.length ? 'Clear all' : 'Select all' }}</button><button class="button primary" type="button" :disabled="!selectedLabelCodes.length" @click="printLabels"><Printer :size="14" /> Print selected<span v-if="selectedLabelCodes.length"> ({{ selectedLabelCodes.length }})</span></button></div>
+          <div class="filter-row labels-filter-row">
+            <div class="label-toolbar">
+              <div class="page-description"><strong>Inventory labels</strong><span>Roll labels identify Batches; reusable sheet/card labels identify Items.</span></div>
+              <label class="compact-search label-search"><Search :size="14" /><input v-model="labelQuery" placeholder="Search name, SKU, or Batch" aria-label="Search inventory labels" /><button v-if="labelQuery" class="search-clear" type="button" aria-label="Clear label search" @click="labelQuery = ''"><X :size="13" /></button></label>
+              <span class="label-count">{{ filteredLabels.length === labels.length ? `${labels.length} labels` : `${filteredLabels.length} of ${labels.length} labels` }} · {{ form.warehouse }}</span>
+            </div>
+            <div class="label-actions"><button class="button subtle" type="button" :disabled="!filteredLabels.length" @click="toggleAllLabels">{{ allFilteredLabelsSelected ? 'Clear results' : 'Select results' }}</button><button class="button primary" type="button" :disabled="!selectedLabelCodes.length" @click="printLabels"><Printer :size="14" /> Print selected<span v-if="selectedLabelCodes.length"> ({{ selectedLabelCodes.length }})</span></button></div>
           </div>
           <div class="label-grid">
-            <article v-for="label in labels" :key="label.label_code" class="label-card" :class="{ selected: selectedLabelCodes.includes(label.label_code), 'not-selected': !selectedLabelCodes.includes(label.label_code) }">
+            <article v-for="label in filteredLabels" :key="label.label_code" class="label-card" :class="{ selected: selectedLabelCodes.includes(label.label_code) }">
               <input v-model="selectedLabelCodes" class="label-checkbox" type="checkbox" :value="label.label_code" :aria-label="`Select ${label.item_name} ${label.tracking} label`" />
               <strong>{{ label.item_name }}</strong><span>{{ label.item_code }}</span>
               <div class="barcode-wrap"><BarcodeSvg :value="label.label_code" /></div>
               <code>{{ label.label_code }}</code><em>{{ label.tracking }} label · {{ formatNumber(label.remaining) }} {{ formatUnit(label.stock_uom, label.remaining) }} on hand</em>
             </article>
             <div v-if="!labels.length" class="empty-list">No roll Batches or sheet/card Items were found for this Warehouse.</div>
+            <div v-else-if="!filteredLabels.length" class="empty-list">No labels match “{{ labelQuery }}”.</div>
+          </div>
+          <div class="print-label-pages" aria-hidden="true">
+            <section v-for="(page, pageIndex) in printableLabelPages" :key="`print-page-${pageIndex}`" class="print-label-page">
+              <article v-for="label in page" :key="`print-${label.label_code}`" class="label-card print-label-card">
+                <strong>{{ label.item_name }}</strong><span>{{ label.item_code }}</span>
+                <div class="barcode-wrap"><BarcodeSvg :value="label.label_code" /></div>
+                <code>{{ label.label_code }}</code><em>{{ label.tracking === 'Batch' ? 'Roll Batch label' : 'Reusable Item label' }}</em>
+              </article>
+            </section>
           </div>
         </div>
 

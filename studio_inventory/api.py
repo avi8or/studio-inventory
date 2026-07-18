@@ -614,16 +614,30 @@ def get_recent_activity(limit: int = 30) -> list[dict]:
 	return rows
 
 
+def _get_all_list(doctype: str, *, page_length: int = 500, **kwargs) -> list:
+	rows = []
+	start = 0
+	while True:
+		page = frappe.get_list(
+			doctype,
+			limit_start=start,
+			limit_page_length=page_length,
+			**kwargs,
+		)
+		rows.extend(page)
+		if len(page) < page_length:
+			return rows
+		start += len(page)
+
+
 @frappe.whitelist(methods=["POST"])
-def get_inventory_labels(warehouse: str, limit: int = 50) -> list[dict]:
+def get_inventory_labels(warehouse: str) -> list[dict]:
 	_warehouse_company(warehouse)
-	limit = min(max(int(limit), 1), 100)
-	batches = frappe.get_list(
+	batches = _get_all_list(
 		"Batch",
 		filters={"disabled": 0},
 		fields=["name", "item", "creation"],
 		order_by="creation desc",
-		limit_page_length=limit * 3,
 	)
 	labels = []
 	for batch in batches:
@@ -642,10 +656,8 @@ def get_inventory_labels(warehouse: str, limit: int = 50) -> list[dict]:
 				"remaining": quantity,
 			}
 		)
-		if len(labels) >= limit:
-			break
 
-	sheet_items = frappe.get_list(
+	sheet_items = _get_all_list(
 		"Item",
 		filters={
 			"disabled": 0,
@@ -654,8 +666,7 @@ def get_inventory_labels(warehouse: str, limit: int = 50) -> list[dict]:
 			"stock_uom": ("in", ["Sheet", "Card Set"]),
 		},
 		fields=["name"],
-		order_by="modified desc",
-		limit_page_length=limit,
+		order_by="item_name asc",
 	)
 	for row in sheet_items:
 		item = _item(row.name)
@@ -670,4 +681,5 @@ def get_inventory_labels(warehouse: str, limit: int = 50) -> list[dict]:
 				"remaining": _balance(item.name, warehouse),
 			}
 		)
+	labels.sort(key=lambda label: (label["item_name"].casefold(), label["label_code"].casefold()))
 	return labels

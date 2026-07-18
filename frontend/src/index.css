@@ -100,6 +100,67 @@ select:disabled {
   padding: 8px;
 }
 
+.app-menu {
+  position: relative;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-menu summary {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 4px;
+  border-radius: 7px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.app-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.app-menu summary:hover {
+  background: var(--surface-gray-2);
+}
+
+.app-menu-popover {
+  position: absolute;
+  z-index: 80;
+  top: 43px;
+  left: 0;
+  display: grid;
+  width: 232px;
+  padding: 7px;
+  border: 1px solid var(--outline-gray);
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: var(--shadow-panel);
+}
+
+.app-menu-popover > strong {
+  padding: 7px 8px 5px;
+  color: var(--ink-gray-5);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.app-menu-popover a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: var(--ink-gray-8);
+  text-decoration: none;
+}
+
+.app-menu-popover a:hover {
+  background: var(--surface-gray-2);
+}
+
 .app-mark {
   display: grid;
   width: 34px;
@@ -139,6 +200,11 @@ select:disabled {
 
 .account-chevron {
   color: var(--ink-gray-5);
+  transition: transform 150ms ease;
+}
+
+.app-menu[open] .account-chevron {
+  transform: rotate(180deg);
 }
 
 .sidebar-nav {
@@ -190,6 +256,15 @@ select:disabled {
   padding-inline: 7px;
 }
 
+.sidebar.collapsed .app-menu summary {
+  padding: 0;
+}
+
+.sidebar.collapsed .app-menu-popover {
+  top: 0;
+  left: 40px;
+}
+
 .sidebar.collapsed .collapse-link svg {
   transform: rotate(180deg);
 }
@@ -236,8 +311,8 @@ select:disabled {
   flex: 0 0 7px;
   margin-top: 4px;
   border-radius: 50%;
-  background: #16a34a;
-  box-shadow: 0 0 0 3px #dcfce7;
+  background: var(--ink-gray-5);
+  box-shadow: 0 0 0 3px var(--surface-gray-3);
 }
 
 .workspace {
@@ -822,6 +897,24 @@ select:disabled {
   font-size: 12px;
 }
 
+.search-clear {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--ink-gray-5);
+  background: transparent;
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  background: var(--surface-gray-3);
+}
+
 .activity-list {
   padding: 0 20px 40px;
 }
@@ -924,11 +1017,45 @@ select:disabled {
   gap: 8px;
 }
 
+.labels-page {
+  overflow: hidden;
+}
+
+.labels-filter-row {
+  flex: 0 0 auto;
+}
+
+.label-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.label-search {
+  width: min(310px, 35vw);
+}
+
+.label-count {
+  flex: 0 0 auto;
+  color: var(--ink-gray-5);
+  font-size: 11px;
+}
+
 .label-grid {
   display: grid;
+  min-height: 0;
+  flex: 1;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-content: start;
   gap: 16px;
   padding: 20px;
+  overflow-y: auto;
+}
+
+.print-label-pages {
+  display: none;
 }
 
 .empty-list {
@@ -970,6 +1097,8 @@ select:disabled {
 }
 
 .label-card > strong {
+  max-width: 100%;
+  padding-inline: 22px;
   font-size: 13px;
   font-weight: 600;
 }
@@ -1349,6 +1478,15 @@ select:disabled {
     right: auto;
     left: 18px;
   }
+
+  .labels-filter-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .labels-filter-row .label-actions {
+    align-self: flex-end;
+  }
 }
 
 @media (max-width: 639px) {
@@ -1382,6 +1520,10 @@ select:disabled {
   .sidebar.collapsed .nav-link {
     justify-content: flex-start;
     padding-inline: 8px;
+  }
+
+  .sidebar.collapsed .app-menu summary {
+    padding: 4px;
   }
 
   .mobile-scrim {
@@ -1514,8 +1656,22 @@ select:disabled {
     padding: 12px;
   }
 
+  .label-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .label-search {
+    width: 100%;
+  }
+
   .label-actions {
     width: 100%;
+  }
+
+  .labels-filter-row .label-actions {
+    align-self: stretch;
   }
 
   .label-actions .button.primary {
@@ -1611,6 +1767,11 @@ select:disabled {
   }
 }
 
+@page {
+  size: letter portrait;
+  margin: 0.35in;
+}
+
 @media print {
   body {
     overflow: visible;
@@ -1634,19 +1795,64 @@ select:disabled {
   }
 
   .label-grid {
-    grid-template-columns: repeat(2, 3.5in);
-    gap: 0.25in;
-    padding: 0;
+    display: none;
   }
 
-  .label-card {
-    min-height: 1.8in;
+  .print-label-pages {
+    display: block;
+  }
+
+  .print-label-page {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: repeat(5, 1.94in);
+    column-gap: 0.16in;
+    row-gap: 0.12in;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .print-label-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .print-label-card {
+    min-height: 0;
+    height: 1.94in;
+    padding: 0.15in;
+    border: 1px dashed #777;
+    border-radius: 0;
     break-inside: avoid;
     box-shadow: none;
   }
 
-  .label-card.not-selected {
-    display: none;
+  .print-label-card > strong {
+    max-width: 100%;
+    overflow: hidden;
+    padding-inline: 0;
+    font-size: 10pt;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .print-label-card > span,
+  .print-label-card > em {
+    font-size: 7.5pt;
+  }
+
+  .print-label-card > code {
+    margin: 0.02in 0 0.03in;
+    font-size: 9pt;
+  }
+
+  .print-label-card .barcode-wrap {
+    min-height: 0.72in;
+    margin-top: 0.08in;
+  }
+
+  .print-label-card .barcode-wrap svg {
+    max-height: 0.72in;
   }
 
   .label-checkbox {
