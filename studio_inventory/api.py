@@ -230,13 +230,18 @@ def resolve_scan(code: str, action: str, warehouse: str | None = None) -> dict:
 		frappe.throw(_("This Item is tracked by physical roll. Scan the unique Batch label on the roll."))
 
 	purchase_uoms = []
+	seen_uoms = set()
 	if not item.has_batch_no:
 		purchase_uoms.append({"uom": item.stock_uom, "conversion_factor": 1, "physical_units": 1})
+		seen_uoms.add(item.stock_uom)
 	for row in item.uoms:
+		if row.uom in seen_uoms:
+			continue
 		try:
 			physical_units = physical_units_for_uom(row.uom, batched=bool(item.has_batch_no))
 		except DomainError:
 			continue
+		seen_uoms.add(row.uom)
 		purchase_uoms.append(
 			{
 				"uom": row.uom,
