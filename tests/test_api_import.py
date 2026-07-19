@@ -106,7 +106,7 @@ class ApiImportTests(unittest.TestCase):
 		)
 		torchon_template = types.SimpleNamespace(
 			name="P-HAHN-TORCHON-285",
-			item_name="Hahnemühle — Torchon — 285 GSM",
+			item_name="Hahnemühle — Torchon — 285 GSM — Roll",
 			brand="Hahnemühle",
 		)
 		queried_doctypes = []

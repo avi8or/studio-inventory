@@ -761,6 +761,12 @@ def _paper_line(item, template, manufacturer: str) -> str:
 			count=1,
 			flags=re.IGNORECASE,
 		).strip()
+	display_name = re.sub(
+		r"\s+[—–\-]\s*(?:roll|sheet|card(?:\s+set)?|pack)s?\s*$",
+		"",
+		display_name,
+		flags=re.IGNORECASE,
+	).strip()
 	if not template:
 		if item.stock_uom == "Foot":
 			display_name = re.sub(
