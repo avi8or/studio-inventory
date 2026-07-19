@@ -599,7 +599,7 @@ onMounted(async () => {
         <div v-else class="list-page labels-page">
           <div class="filter-row labels-filter-row">
             <div class="label-toolbar">
-              <div class="page-description"><strong>Inventory labels</strong><span>Roll labels identify Batches; reusable sheet/card labels identify Items.</span></div>
+              <div class="page-description"><strong>Inventory labels</strong><span>Roll Item labels receive stock; Batch labels identify physical rolls; reusable sheet/card labels identify Items.</span></div>
               <label class="compact-search label-search"><Search :size="14" /><input v-model="labelQuery" placeholder="Search name, SKU, or Batch" aria-label="Search inventory labels" /><button v-if="labelQuery" class="search-clear" type="button" aria-label="Clear label search" @click="labelQuery = ''"><X :size="13" /></button></label>
               <span class="label-count">{{ filteredLabels.length === labels.length ? `${labels.length} labels` : `${filteredLabels.length} of ${labels.length} labels` }} · {{ form.warehouse }}</span>
             </div>
@@ -610,9 +610,9 @@ onMounted(async () => {
               <input v-model="selectedLabelCodes" class="label-checkbox" type="checkbox" :value="label.label_code" :aria-label="`Select ${label.item_name} ${label.tracking} label`" />
               <strong>{{ label.item_name }}</strong><span>{{ label.item_code }}</span>
               <div class="barcode-wrap"><BarcodeSvg :value="label.label_code" /></div>
-              <code>{{ label.label_code }}</code><em>{{ label.tracking }} label · {{ formatNumber(label.remaining) }} {{ formatUnit(label.stock_uom, label.remaining) }} on hand</em>
+              <code>{{ label.label_code }}</code><em>{{ label.receive_only ? 'Receive Item label' : `${label.tracking} label` }} · {{ formatNumber(label.remaining) }} {{ formatUnit(label.stock_uom, label.remaining) }} on hand</em>
             </article>
-            <div v-if="!labels.length" class="empty-list">No roll Batches or sheet/card Items were found for this Warehouse.</div>
+            <div v-if="!labels.length" class="empty-list">No roll, sheet, or card Items were found for this Warehouse.</div>
             <div v-else-if="!filteredLabels.length" class="empty-list">No labels match “{{ labelQuery }}”.</div>
           </div>
           <div class="print-label-pages" aria-hidden="true">
@@ -620,7 +620,7 @@ onMounted(async () => {
               <article v-for="label in page" :key="`print-${label.label_code}`" class="label-card print-label-card">
                 <strong>{{ label.item_name }}</strong><span>{{ label.item_code }}</span>
                 <div class="barcode-wrap"><BarcodeSvg :value="label.label_code" /></div>
-                <code>{{ label.label_code }}</code><em>{{ label.tracking === 'Batch' ? 'Roll Batch label' : 'Reusable Item label' }}</em>
+                <code>{{ label.label_code }}</code><em>{{ label.receive_only ? 'Roll Item label · Receive' : label.tracking === 'Batch' ? 'Roll Batch label' : 'Reusable Item label' }}</em>
               </article>
             </section>
           </div>

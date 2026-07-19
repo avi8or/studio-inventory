@@ -12,7 +12,7 @@ export function filterLabels(labels, query) {
 
   return labels.filter((label) => {
     const text = searchable(
-      `${label.item_name} ${label.item_code} ${label.label_code} ${label.tracking} ${label.stock_uom}`,
+      `${label.item_name} ${label.item_code} ${label.label_code} ${label.tracking} ${label.stock_uom} ${label.receive_only ? "receive" : ""}`,
     );
     const compact = text.replaceAll(" ", "");
     return terms.every((term) => text.includes(term) || compact.includes(term));

@@ -655,6 +655,19 @@ def get_inventory_labels(warehouse: str) -> list[dict]:
 			order_by="creation desc",
 		)
 	labels = []
+	for item in roll_items:
+		labels.append(
+			{
+				"label_code": item.name,
+				"tracking": "Item",
+				"batch_no": None,
+				"item_code": item.name,
+				"item_name": item.item_name,
+				"stock_uom": item.stock_uom,
+				"remaining": _balance(item.name, warehouse),
+				"receive_only": True,
+			}
+		)
 	for batch in batches:
 		item = roll_items_by_code.get(batch.item)
 		if not item:
@@ -671,6 +684,7 @@ def get_inventory_labels(warehouse: str) -> list[dict]:
 				"item_name": item.item_name,
 				"stock_uom": item.stock_uom,
 				"remaining": quantity,
+				"receive_only": False,
 			}
 		)
 
@@ -695,6 +709,7 @@ def get_inventory_labels(warehouse: str) -> list[dict]:
 				"item_name": item.item_name,
 				"stock_uom": item.stock_uom,
 				"remaining": _balance(item.name, warehouse),
+				"receive_only": False,
 			}
 		)
 	labels.sort(key=lambda label: (label["item_name"].casefold(), label["label_code"].casefold()))

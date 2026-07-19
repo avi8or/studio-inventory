@@ -65,6 +65,34 @@ class ApiImportTests(unittest.TestCase):
 		)
 		self.assertEqual([call[1] for call in calls], [0, 2])
 
+		roll = types.SimpleNamespace(
+			name="P-HAHN-TORCHON-285-R-24",
+			item_name="Hahnemühle — Torchon — 285 GSM — 24 in roll",
+			stock_uom="Foot",
+		)
+		sheet = types.SimpleNamespace(
+			name="P-HAHN-TORCHON-285-S-13X19",
+			item_name="Hahnemühle — Torchon — 285 GSM — 13 × 19 in",
+			stock_uom="Sheet",
+		)
+		batch = types.SimpleNamespace(name="SIB.000123", item=roll.name)
+
+		def get_all_list(doctype, **kwargs):
+			if doctype == "Batch":
+				return [batch]
+			return [roll] if kwargs["filters"]["has_batch_no"] else [sheet]
+
+		module._warehouse_company = lambda warehouse: "Lightpress"
+		module._get_all_list = get_all_list
+		module._balance = lambda *_args, **_kwargs: 39.37
+
+		labels = module.get_inventory_labels("Stores - LPS")
+		roll_item_label = next(label for label in labels if label["label_code"] == roll.name)
+		roll_batch_label = next(label for label in labels if label["label_code"] == batch.name)
+		self.assertTrue(roll_item_label["receive_only"])
+		self.assertEqual(roll_item_label["tracking"], "Item")
+		self.assertFalse(roll_batch_label["receive_only"])
+
 
 if __name__ == "__main__":
 	unittest.main()

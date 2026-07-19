@@ -18,12 +18,21 @@ const LABELS = [
     tracking: "Batch",
     stock_uom: "Foot",
   },
+  {
+    item_name: "Hahnemühle — Torchon — 285 GSM — 24 in roll",
+    item_code: "P-HAHN-TORCHON-285-R-24",
+    label_code: "P-HAHN-TORCHON-285-R-24",
+    tracking: "Item",
+    stock_uom: "Foot",
+    receive_only: true,
+  },
 ];
 
 test("searches labels by words, compact size, SKU, and Batch", () => {
   assert.deepEqual(filterLabels(LABELS, "red satin 13x19"), [LABELS[0]]);
   assert.deepEqual(filterLabels(LABELS, "photo rag SIB.000123"), [LABELS[1]]);
   assert.deepEqual(filterLabels(LABELS, "ultrapro-satin"), [LABELS[0]]);
+  assert.deepEqual(filterLabels(LABELS, "torchon 24 receive"), [LABELS[2]]);
 });
 
 test("selects and clears only the visible search results", () => {
