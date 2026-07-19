@@ -14,8 +14,8 @@ const LABELS = [
   {
     item_name: "Hahnemühle Photo Rag Roll",
     item_code: "P-HAHN-PHOTORAG-R-24",
-    label_code: "SIB.000123",
-    tracking: "Batch",
+    label_code: "P-HAHN-PHOTORAG-R-24",
+    tracking: "Item",
     stock_uom: "Foot",
   },
   {
@@ -24,15 +24,14 @@ const LABELS = [
     label_code: "P-HAHN-TORCHON-285-R-24",
     tracking: "Item",
     stock_uom: "Foot",
-    receive_only: true,
   },
 ];
 
-test("searches labels by words, compact size, SKU, and Batch", () => {
+test("searches reusable Item labels by words, compact size, SKU, and stock UOM", () => {
   assert.deepEqual(filterLabels(LABELS, "red satin 13x19"), [LABELS[0]]);
-  assert.deepEqual(filterLabels(LABELS, "photo rag SIB.000123"), [LABELS[1]]);
+  assert.deepEqual(filterLabels(LABELS, "photo rag foot"), [LABELS[1]]);
   assert.deepEqual(filterLabels(LABELS, "ultrapro-satin"), [LABELS[0]]);
-  assert.deepEqual(filterLabels(LABELS, "torchon 24 receive"), [LABELS[2]]);
+  assert.deepEqual(filterLabels(LABELS, "torchon 24 item"), [LABELS[2]]);
 });
 
 test("selects and clears only the visible search results", () => {

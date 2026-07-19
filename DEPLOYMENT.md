@@ -9,8 +9,6 @@ site to a private bench first.
 - Run Frappe and ERPNext 16.x on the target private bench.
 - If the standalone `crm` app is installed, keep it installed. Studio Inventory
   does not replace, duplicate, or synchronize CRM records.
-- In Stock Settings, enable the legacy Serial/Batch fields used by scanner
-  rows (`Use Serial / Batch Fields`).
 - Enable UOM conversion through each Item's UOM table.
 - Configure a non-group Warehouse, an active Supplier, Company default
   currency, Company cost center, and Stock Adjustment account.
@@ -21,11 +19,10 @@ Roll variants:
 
 - Stock UOM: `Foot`
 - Maintain Stock: enabled
-- Has Batch No: enabled
+- Has Batch No: disabled
 - One Item UOM per purchasable roll, for example `Roll 50 Foot` with conversion
   factor `50`
-- A case UOM may use `Case 2 × 50 Foot Rolls` with conversion factor `100`;
-  Studio Inventory creates two physical Batches per case
+- A case UOM may use `Case 2 × 50 Foot Rolls` with conversion factor `100`
 
 Sheet and card-set variants:
 
@@ -36,12 +33,11 @@ Sheet and card-set variants:
   counts as conversion factors
 
 Manufacturer barcodes belong in the Item's Barcode table. Studio Inventory
-also accepts the Item code. For consumption and counting, a batched roll must
-be scanned by its unique Studio Inventory Batch label.
+also accepts the Item code. The same reusable Item barcode works for receiving,
+consumption, and counting.
 
-The Labels view can print a reusable Code 128 Item/shelf label for every active
-Sheet or Card Set Item, including Items with a zero balance. It also prints one
-unique Code 128 Batch label for each positive-balance physical roll.
+The Labels view can print a reusable Code 128 Item label for every active Paper
+roll, Sheet, or Card Set Item, including Items with a zero balance.
 
 ## 3. Publish and install
 
@@ -99,15 +95,15 @@ the actions they need:
 | Quote to order | Sales Order and Customer | Create; Customer create when needed |
 
 Read permission and User Permissions must also allow the selected Company,
-Warehouse, Item, Item Price, Batch, and Supplier. The app does not bypass
+Warehouse, Item, Item Price, and Supplier. The app does not bypass
 transaction or Customer permissions.
 
 ## 6. Configure the scanner and labels
 
 - Use a 1D/2D scanner in Bluetooth, USB, or 2.4G HID keyboard mode.
 - Configure a carriage-return/Enter suffix.
-- Print the generated roll labels as Code 128. The human-readable Batch ID is
-  also printed below the barcode.
+- Print the generated reusable Item labels as Code 128. The human-readable
+  Item code is also printed below the barcode.
 - No ERPNext mobile app, browser extension, or scanner SDK is required; the
   responsive web page works in a signed-in mobile browser.
 
@@ -118,8 +114,8 @@ real balances.
 
 1. Receive one sheet pack and confirm its Purchase Receipt and converted Sheet
    quantity.
-2. Receive one roll and confirm one `SIB.######` Batch and one printable label.
-3. Consume a measured length from that Batch and confirm a Material Issue.
+2. Receive one roll and confirm the purchase UOM converts to the correct feet.
+3. Scan the same Item label, consume a measured length, and confirm a Material Issue.
 4. Consume again using an explicit ending balance and confirm the calculated
    difference.
 5. Record a physical count and confirm a Stock Reconciliation.

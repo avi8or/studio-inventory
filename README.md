@@ -13,10 +13,10 @@ pricing. It deliberately does not keep a second inventory or quotation ledger.
 | Build a calculated print quote | ERPNext Quotation and Quotation Item |
 | Accept a calculated quote | ERPNext Sales Order |
 
-Roll Items use `Foot` as Stock UOM and one ERPNext Batch per physical roll.
-Sheet Items use `Sheet` as Stock UOM and Item-specific purchase UOM conversions
-such as `Pack 25 Sheet`. The scanner remains a standard HID keyboard device;
-no browser extension or vendor SDK is required.
+Roll Items use `Foot` as Stock UOM, and Sheet Items use `Sheet` as Stock UOM.
+Both use one reusable Item barcode and Item-specific purchase UOM conversions,
+such as `Roll 39.37 Foot` or `Pack 25 Sheet`. The scanner remains a standard
+HID keyboard device; no browser extension or vendor SDK is required.
 
 ## Print pricing and quotations
 
@@ -40,10 +40,10 @@ It does not enable Frappe CRM's broad Item-to-Product synchronization. A
 Customer is created or linked only when an accepted CRM Deal quotation becomes
 a Sales Order.
 
-The Labels view prints Code 128 Batch labels for individual rolls and reusable
-Code 128 Item/shelf labels for sheets and card sets. Packs are counted in their
-Stock UOM, so multiple packs of the same Item intentionally share one scannable
-Item code.
+The Labels view prints reusable Code 128 Item labels for rolls, sheets, and
+card sets. Rolls are counted in feet, while packs are counted in their Stock
+UOM. Multiple physical packages of the same Item intentionally share one
+scannable Item code and one aggregate warehouse balance.
 
 The Command card view prints a letter-size scanner control sheet intended for
 matte lamination. Its QR codes open the app or deep-link directly to Receive,
@@ -53,8 +53,7 @@ as an Item lookup. Code 128 commands select amount-used versus ending-balance
 entry, provide a numeric keypad, confirm or cancel a prepared transaction, and
 undo the latest app-created transaction. Confirm still calls the normal app
 method and cannot bypass ERPNext validation or permissions. Scanner commands
-use the `SI:` namespace, and automatically created Batch IDs use the
-`SIB.######` naming series.
+use the `SI:` namespace.
 
 Supported deep links are:
 

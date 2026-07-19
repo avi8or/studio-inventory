@@ -45,7 +45,7 @@ const VIEW_COPY = {
     title: "Consume",
     action: "Material use",
     prompt: "Scan inventory to consume",
-    help: "For rolls, scan the unique Batch label. For sheets, scan the shelf label.",
+    help: "Scan the reusable Item label. Enter feet for rolls or sheets for packs.",
   },
   count: {
     title: "Count",
@@ -375,6 +375,8 @@ async function resolveScan() {
     form.unitCost = null;
     form.purchaseUom =
       result.purchase_uoms.find((row) => row.uom === result.barcode_uom)?.uom ||
+      result.purchase_uoms.find((row) => row.uom === result.default_purchase_uom)?.uom ||
+      result.purchase_uoms.find((row) => row.uom !== result.stock_uom)?.uom ||
       result.purchase_uoms[0]?.uom ||
       "";
     form.mode = "amount";
@@ -507,7 +509,6 @@ onMounted(async () => {
             <strong>Open in ERPNext</strong>
             <a href="/app/stock" role="menuitem"><span>Stock workspace</span><ExternalLink :size="13" /></a>
             <a href="/app/item" role="menuitem"><span>Items &amp; barcodes</span><ExternalLink :size="13" /></a>
-            <a href="/app/batch" role="menuitem"><span>Batches</span><ExternalLink :size="13" /></a>
             <a href="/app/purchase-receipt" role="menuitem"><span>Purchase Receipts</span><ExternalLink :size="13" /></a>
             <a href="/app/stock-entry" role="menuitem"><span>Stock Entries</span><ExternalLink :size="13" /></a>
             <a href="/app/stock-reconciliation" role="menuitem"><span>Stock Reconciliations</span><ExternalLink :size="13" /></a>
@@ -599,8 +600,8 @@ onMounted(async () => {
         <div v-else class="list-page labels-page">
           <div class="filter-row labels-filter-row">
             <div class="label-toolbar">
-              <div class="page-description"><strong>Inventory labels</strong><span>Roll Item labels receive stock; Batch labels identify physical rolls; reusable sheet/card labels identify Items.</span></div>
-              <label class="compact-search label-search"><Search :size="14" /><input v-model="labelQuery" placeholder="Search name, SKU, or Batch" aria-label="Search inventory labels" /><button v-if="labelQuery" class="search-clear" type="button" aria-label="Clear label search" @click="labelQuery = ''"><X :size="13" /></button></label>
+              <div class="page-description"><strong>Inventory labels</strong><span>Reusable Item labels identify rolls, sheets, and cards; quantities use each Item's stock UOM.</span></div>
+              <label class="compact-search label-search"><Search :size="14" /><input v-model="labelQuery" placeholder="Search name, SKU, or unit" aria-label="Search inventory labels" /><button v-if="labelQuery" class="search-clear" type="button" aria-label="Clear label search" @click="labelQuery = ''"><X :size="13" /></button></label>
               <span class="label-count">{{ filteredLabels.length === labels.length ? `${labels.length} labels` : `${filteredLabels.length} of ${labels.length} labels` }} · {{ form.warehouse }}</span>
             </div>
             <div class="label-actions"><button class="button subtle" type="button" :disabled="!filteredLabels.length" @click="toggleAllLabels">{{ allFilteredLabelsSelected ? 'Clear results' : 'Select results' }}</button><button class="button primary" type="button" :disabled="!selectedLabelCodes.length" @click="printLabels"><Printer :size="14" /> Print selected<span v-if="selectedLabelCodes.length"> ({{ selectedLabelCodes.length }})</span></button></div>
@@ -610,7 +611,7 @@ onMounted(async () => {
               <input v-model="selectedLabelCodes" class="label-checkbox" type="checkbox" :value="label.label_code" :aria-label="`Select ${label.item_name} ${label.tracking} label`" />
               <strong>{{ label.item_name }}</strong><span>{{ label.item_code }}</span>
               <div class="barcode-wrap"><BarcodeSvg :value="label.label_code" /></div>
-              <code>{{ label.label_code }}</code><em>{{ label.receive_only ? 'Receive Item label' : `${label.tracking} label` }} · {{ formatNumber(label.remaining) }} {{ formatUnit(label.stock_uom, label.remaining) }} on hand</em>
+              <code>{{ label.label_code }}</code><em>Reusable Item label · {{ formatNumber(label.remaining) }} {{ formatUnit(label.stock_uom, label.remaining) }} on hand</em>
             </article>
             <div v-if="!labels.length" class="empty-list">No roll, sheet, or card Items were found for this Warehouse.</div>
             <div v-else-if="!filteredLabels.length" class="empty-list">No labels match “{{ labelQuery }}”.</div>
@@ -620,7 +621,7 @@ onMounted(async () => {
               <article v-for="label in page" :key="`print-${label.label_code}`" class="label-card print-label-card">
                 <strong>{{ label.item_name }}</strong><span>{{ label.item_code }}</span>
                 <div class="barcode-wrap"><BarcodeSvg :value="label.label_code" /></div>
-                <code>{{ label.label_code }}</code><em>{{ label.receive_only ? 'Roll Item label · Receive' : label.tracking === 'Batch' ? 'Roll Batch label' : 'Reusable Item label' }}</em>
+                <code>{{ label.label_code }}</code><em>Reusable Item label</em>
               </article>
             </section>
           </div>
@@ -645,7 +646,7 @@ onMounted(async () => {
                 <label class="field"><span>Supplier</span><select v-model="form.supplier"><option value="">Select supplier</option><option v-for="supplier in options.suppliers" :key="supplier.name" :value="supplier.name">{{ supplier.supplier_name || supplier.name }}</option></select></label>
                 <label class="field"><span>Warehouse</span><select v-model="form.warehouse"><option v-for="warehouse in options.warehouses" :key="warehouse.name" :value="warehouse.name">{{ warehouse.name }}</option></select></label>
                 <label class="field"><span>Purchase unit</span><select v-model="form.purchaseUom"><option v-for="uom in selected.purchase_uoms" :key="uom.uom" :value="uom.uom">{{ uom.uom }}</option></select></label>
-                <label class="field"><span>Number of {{ selected.has_batch_no ? 'packages' : 'packs' }}</span><input v-model.number="form.purchaseUnits" type="number" min="1" step="1" /></label>
+                <label class="field"><span>Number of purchase units</span><input v-model.number="form.purchaseUnits" type="number" min="1" step="1" /></label>
                 <label class="field"><span>Unit cost</span><div class="number-wrap"><input v-model.number="form.unitCost" type="number" min="0" step="0.01" /><em>$</em></div></label>
                 <label class="field readonly-field"><span>Stock received</span><div>{{ formatNumber(receiveStockQty) }} {{ formatUnit(selected.stock_uom, receiveStockQty) }}</div></label>
               </div>

@@ -21,10 +21,52 @@ def after_migrate() -> None:
 
 
 def _apply_setup() -> None:
+	_migrate_paper_rolls_to_item_tracking()
 	_create_fields()
 	_enable_crm_deal_quotations()
 	_create_crm_form_script()
 	ensure_stock_workspace_link()
+
+
+def _migrate_paper_rolls_to_item_tracking() -> None:
+	item_names = frappe.get_all(
+		"Item",
+		filters={
+			"item_group": "Paper",
+			"stock_uom": "Foot",
+			"has_batch_no": 1,
+		},
+		pluck="name",
+	)
+	if not item_names:
+		return
+
+	for start in range(0, len(item_names), 500):
+		chunk = item_names[start : start + 500]
+		batch = frappe.db.exists("Batch", {"item": ("in", chunk)})
+		ledger_entry = frappe.db.exists("Stock Ledger Entry", {"item_code": ("in", chunk)})
+		nonzero_bin = frappe.db.exists(
+			"Bin",
+			{"item_code": ("in", chunk), "actual_qty": ("!=", 0)},
+		)
+		if batch or ledger_entry or nonzero_bin:
+			frappe.throw(
+				"Paper roll Batch tracking cannot be disabled after Batch or stock records exist. "
+				"Resolve the existing roll history before migrating Studio Inventory."
+			)
+
+	for item_name in item_names:
+		frappe.db.set_value(
+			"Item",
+			item_name,
+			{
+				"has_batch_no": 0,
+				"create_new_batch": 0,
+				"batch_number_series": None,
+			},
+			update_modified=False,
+		)
+	frappe.clear_cache(doctype="Item")
 
 
 def _create_fields() -> None:

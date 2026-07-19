@@ -18,6 +18,20 @@ class ReceiptPlanTests(unittest.TestCase):
 		self.assertIsNone(plan.quantity_per_batch)
 		self.assertEqual(plan.stock_rate, 3.5)
 
+	def test_roll_converts_purchase_units_to_aggregate_feet(self):
+		plan = plan_receipt(
+			purchase_units=2,
+			conversion_factor=39.37,
+			unit_cost=200,
+			purchase_uom="Roll 39.37 Foot",
+			batched=False,
+		)
+
+		self.assertEqual(plan.stock_quantity, 78.74)
+		self.assertEqual(plan.physical_units, 2)
+		self.assertIsNone(plan.quantity_per_batch)
+		self.assertAlmostEqual(plan.stock_rate, 200 / 39.37)
+
 	def test_single_roll_creates_one_batch(self):
 		plan = plan_receipt(
 			purchase_units=2,
