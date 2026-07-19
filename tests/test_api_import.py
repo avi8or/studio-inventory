@@ -2,6 +2,7 @@ import importlib.util
 import sys
 import types
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -38,6 +39,7 @@ class ApiImportTests(unittest.TestCase):
 		frappe_utils = types.ModuleType("frappe.utils")
 		frappe_utils.cint = lambda value: int(value)
 		frappe_utils.flt = float
+		frappe_utils.getdate = lambda value: value if isinstance(value, date) else date.fromisoformat(value)
 		frappe_utils.now_datetime = lambda: None
 		frappe_utils.nowdate = lambda: None
 		frappe_utils.nowtime = lambda: None
@@ -204,6 +206,60 @@ class ApiImportTests(unittest.TestCase):
 		self.assertEqual(replacement["remaining"], 0)
 		self.assertEqual([row.barcode for row in legacy_doc.barcodes], ["012345678905", "LP000042"])
 		self.assertEqual(NamingSeries.values["LP.######"], 42)
+
+		class Row(dict):
+			__getattr__ = dict.get
+
+		purchase_item = types.SimpleNamespace(
+			name=roll.name,
+			stock_uom="Foot",
+			uoms=[types.SimpleNamespace(uom="Roll 39.37 Foot", conversion_factor=39.37)],
+			item_defaults=[
+				types.SimpleNamespace(company="Lightpress Studios", default_supplier="B&H Photo Video")
+			],
+		)
+		price_rows = [
+			Row(
+				name="PRICE-001",
+				price_list="Standard Buying",
+				price_list_rate=257.99,
+				uom="Roll 39.37 Foot",
+				supplier="B&H Photo Video",
+				currency="USD",
+				valid_from="2026-07-01",
+				valid_upto=None,
+				si_merchant_url="https://example.com/torchon",
+				si_last_verified_on="2026-07-18",
+			),
+			Row(
+				name="PRICE-EXPIRED",
+				price_list="Standard Buying",
+				price_list_rate=199,
+				uom="Roll 39.37 Foot",
+				supplier="B&H Photo Video",
+				currency="USD",
+				valid_from="2026-01-01",
+				valid_upto="2026-06-30",
+			),
+		]
+		frappe.get_cached_doc = lambda doctype: types.SimpleNamespace(
+			paper_cost_price_list="Standard Buying"
+		)
+		frappe.get_list = lambda doctype, **_kwargs: price_rows if doctype == "Item Price" else []
+		frappe.db = types.SimpleNamespace(
+			has_column=lambda doctype, fieldname: (doctype, fieldname) == ("Item Price", "si_merchant_url"),
+			exists=lambda doctype, filters: doctype == "Supplier" and filters["name"] == "B&H Photo Video",
+		)
+		module.nowdate = lambda: "2026-07-19"
+
+		purchase_defaults = module._purchase_defaults(purchase_item, "Lightpress Studios")
+		self.assertEqual(purchase_defaults["default_supplier"], "B&H Photo Video")
+		self.assertEqual(purchase_defaults["buying_price_list"], "Standard Buying")
+		self.assertEqual(len(purchase_defaults["buying_prices"]), 1)
+		self.assertAlmostEqual(
+			purchase_defaults["buying_prices"][0]["stock_rate"],
+			257.99 / 39.37,
+		)
 
 
 if __name__ == "__main__":

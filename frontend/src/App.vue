@@ -38,6 +38,11 @@ import {
   inventoryUrl,
   parseScannerCommand,
 } from "./scannerCommands.js";
+import {
+  buyingPriceFor,
+  formatRequiredFields,
+  missingReceiveFields,
+} from "./receiveForm.js";
 
 const VIEW_COPY = {
   receive: {
@@ -146,15 +151,28 @@ const quantityChange = computed(() => {
 const transactionReady = computed(() => {
   if (!selected.value || !form.warehouse) return false;
   if (activeView.value === "receive") {
-    const units = Number(form.purchaseUnits);
-    const hasCost = form.unitCost !== null && form.unitCost !== "" && Number.isFinite(Number(form.unitCost));
-    return Boolean(form.supplier && form.purchaseUom && Number.isInteger(units) && units >= 1 && hasCost);
+    return receiveMissingFields.value.length === 0;
   }
   if (activeView.value === "consume") {
     return quantityChange.value.change < 0 && Math.abs(quantityChange.value.change) <= quantityChange.value.before;
   }
   return quantityChange.value.after >= 0 && quantityChange.value.change !== 0;
 });
+
+const receiveMissingFields = computed(() => missingReceiveFields(form));
+
+const receiveRequirementMessage = computed(() => (
+  receiveMissingFields.value.length
+    ? `Required before receiving: ${formatRequiredFields(receiveMissingFields.value)}.`
+    : ""
+));
+
+const selectedBuyingPrice = computed(() => buyingPriceFor({
+  buyingPrices: selected.value?.buying_prices || [],
+  purchaseUoms: selected.value?.purchase_uoms || [],
+  supplier: form.supplier,
+  purchaseUom: form.purchaseUom,
+}));
 
 const filteredActivity = computed(() => {
   const query = activityQuery.value.trim().toLowerCase();
@@ -311,9 +329,18 @@ async function navigate(view) {
   if (VIEW_COPY[view]) await focusScanner();
 }
 
-function commandError(message) {
+function commandError(message, title = "Scanner command unavailable") {
   scanError.value = message;
-  toast.value = { title: "Scanner command unavailable", message };
+  toast.value = { title, message };
+}
+
+function receiveFieldMissing(field) {
+  return receiveMissingFields.value.includes(field);
+}
+
+function applyBuyingPrice() {
+  form.unitCost = selectedBuyingPrice.value?.suggested_unit_cost ?? null;
+  scanError.value = "";
 }
 
 function currentQuantityEntry() {
@@ -395,7 +422,11 @@ async function executeScannerCommand(command) {
       return;
     }
     if (!transactionReady.value) {
-      commandError("Complete the required transaction fields before confirming.");
+      if (activeView.value === "receive" && receiveMissingFields.value.length) {
+        commandError(receiveRequirementMessage.value, "Cannot receive inventory yet");
+      } else {
+        commandError("Enter a valid inventory quantity before confirming.", "Cannot confirm yet");
+      }
       return;
     }
     await confirmTransaction();
@@ -424,6 +455,7 @@ async function resolveScan() {
     selected.value = result;
     quantityEntry.value = "";
     form.warehouse = result.warehouse;
+    form.supplier = result.default_supplier || options.value.default_supplier || "";
     form.purchaseUnits = 1;
     form.unitCost = null;
     form.purchaseUom =
@@ -432,6 +464,7 @@ async function resolveScan() {
       result.purchase_uoms.find((row) => row.uom !== result.stock_uom)?.uom ||
       result.purchase_uoms[0]?.uom ||
       "";
+    applyBuyingPrice();
     form.mode = "amount";
     form.value = activeView.value === "count" ? result.current_qty : 0;
     form.reason = "Physical measurement";
@@ -801,12 +834,13 @@ onMounted(async () => {
 
             <section v-if="activeView === 'receive'" class="form-section">
               <h3>Purchase details</h3>
+              <div v-if="receiveRequirementMessage" class="receive-requirements" role="status"><Info :size="14" /><span>{{ receiveRequirementMessage }}</span></div>
               <div class="field-grid">
-                <label class="field"><span>Supplier</span><select v-model="form.supplier"><option value="">Select supplier</option><option v-for="supplier in options.suppliers" :key="supplier.name" :value="supplier.name">{{ supplier.supplier_name || supplier.name }}</option></select></label>
-                <label class="field"><span>Warehouse</span><select v-model="form.warehouse"><option v-for="warehouse in options.warehouses" :key="warehouse.name" :value="warehouse.name">{{ warehouse.name }}</option></select></label>
-                <label class="field"><span>Purchase unit</span><select v-model="form.purchaseUom"><option v-for="uom in selected.purchase_uoms" :key="uom.uom" :value="uom.uom">{{ uom.uom }}</option></select></label>
-                <label class="field"><span>Number of purchase units</span><input v-model.number="form.purchaseUnits" type="number" min="1" step="1" /></label>
-                <label class="field"><span>Unit cost</span><div class="number-wrap"><input v-model.number="form.unitCost" type="number" min="0" step="0.01" /><em>$</em></div></label>
+                <label class="field" :class="{ invalid: receiveFieldMissing('Supplier') }"><span>Supplier <em class="required-label">Required</em></span><select v-model="form.supplier" required :aria-invalid="receiveFieldMissing('Supplier')" @change="applyBuyingPrice"><option value="">Select supplier</option><option v-for="supplier in options.suppliers" :key="supplier.name" :value="supplier.name">{{ supplier.supplier_name || supplier.name }}</option></select><small v-if="receiveFieldMissing('Supplier')" class="field-error">Choose who this inventory came from.</small></label>
+                <label class="field" :class="{ invalid: receiveFieldMissing('Warehouse') }"><span>Warehouse <em class="required-label">Required</em></span><select v-model="form.warehouse" required :aria-invalid="receiveFieldMissing('Warehouse')"><option v-for="warehouse in options.warehouses" :key="warehouse.name" :value="warehouse.name">{{ warehouse.name }}</option></select><small v-if="receiveFieldMissing('Warehouse')" class="field-error">Choose where the inventory will be stored.</small></label>
+                <label class="field" :class="{ invalid: receiveFieldMissing('Purchase unit') }"><span>Purchase unit <em class="required-label">Required</em></span><select v-model="form.purchaseUom" required :aria-invalid="receiveFieldMissing('Purchase unit')" @change="applyBuyingPrice"><option v-for="uom in selected.purchase_uoms" :key="uom.uom" :value="uom.uom">{{ uom.uom }}</option></select><small v-if="receiveFieldMissing('Purchase unit')" class="field-error">Choose the package or roll size purchased.</small></label>
+                <label class="field" :class="{ invalid: receiveFieldMissing('Number of purchase units') }"><span>Number of purchase units <em class="required-label">Required</em></span><input v-model.number="form.purchaseUnits" type="number" min="1" step="1" required :aria-invalid="receiveFieldMissing('Number of purchase units')" /><small v-if="receiveFieldMissing('Number of purchase units')" class="field-error">Enter a whole number of packs or rolls.</small></label>
+                <label class="field" :class="{ invalid: receiveFieldMissing('Unit cost') }"><span>Unit cost <em class="required-label">Required</em></span><div class="number-wrap"><input v-model.number="form.unitCost" type="number" min="0" step="0.01" required :aria-invalid="receiveFieldMissing('Unit cost')" @input="scanError = ''" /><em>$</em></div><small v-if="selectedBuyingPrice" class="field-help">Suggested by {{ selectedBuyingPrice.price_list }}<template v-if="selectedBuyingPrice.supplier"> · {{ selectedBuyingPrice.supplier }}</template></small><small v-else-if="receiveFieldMissing('Unit cost')" class="field-error">No current buying price was found; enter the cost for one purchase unit.</small></label>
                 <label class="field readonly-field"><span>Stock received</span><div>{{ formatNumber(receiveStockQty) }} {{ formatUnit(selected.stock_uom, receiveStockQty) }}</div></label>
               </div>
               <div v-if="selected.has_batch_no" class="notice blue"><Info :size="16" /><div><strong>{{ physicalUnits }} physical {{ physicalUnits === 1 ? 'roll' : 'rolls' }} will create {{ physicalUnits }} unique {{ physicalUnits === 1 ? 'Batch' : 'Batches' }}.</strong><span>Every physical roll receives its own printable Code 128 label.</span></div></div>

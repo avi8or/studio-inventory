@@ -7,7 +7,7 @@ from typing import Any
 import frappe
 from frappe import _
 from frappe.model.naming import NamingSeries, make_autoname
-from frappe.utils import cint, flt, now_datetime, nowdate, nowtime
+from frappe.utils import cint, flt, getdate, now_datetime, nowdate, nowtime
 
 from studio_inventory.domain import (
 	DomainError,
@@ -107,6 +107,99 @@ def _conversion_factor(item, uom: str) -> float:
 			return flt(row.conversion_factor)
 	frappe.throw(_("UOM {0} is not configured on Item {1}.").format(uom, item.name), frappe.ValidationError)
 	return 0.0
+
+
+def _configured_conversion_factor(item, uom: str | None) -> float | None:
+	if not uom or uom == item.stock_uom:
+		return 1.0
+	for row in item.uoms:
+		if row.uom == uom:
+			conversion_factor = flt(row.conversion_factor)
+			return conversion_factor if conversion_factor > 0 else None
+	return None
+
+
+def _active_supplier(supplier: str | None) -> str | None:
+	if supplier and frappe.db.exists("Supplier", {"name": supplier, "disabled": 0}):
+		return supplier
+	return None
+
+
+def _item_default_supplier(item, company: str) -> str | None:
+	for row in item.item_defaults:
+		if row.company == company:
+			return _active_supplier(row.default_supplier)
+	return None
+
+
+def _paper_buying_price_list() -> str:
+	settings = frappe.get_cached_doc("Studio Pricing Settings")
+	return settings.paper_cost_price_list or "Standard Buying"
+
+
+def _buying_prices(item, price_list: str) -> list[dict[str, Any]]:
+	fields = [
+		"name",
+		"price_list",
+		"price_list_rate",
+		"uom",
+		"supplier",
+		"currency",
+		"valid_from",
+		"valid_upto",
+	]
+	if frappe.db.has_column("Item Price", "si_merchant_url"):
+		fields.extend(["si_merchant_url", "si_last_verified_on"])
+	rows = frappe.get_list(
+		"Item Price",
+		filters={"item_code": item.name, "price_list": price_list},
+		fields=fields,
+		order_by="valid_from desc, modified desc",
+		limit_page_length=100,
+	)
+	today = getdate(nowdate())
+	prices = []
+	for row in rows:
+		if row.valid_from and getdate(row.valid_from) > today:
+			continue
+		if row.valid_upto and getdate(row.valid_upto) < today:
+			continue
+		uom = row.uom or item.stock_uom
+		conversion_factor = _configured_conversion_factor(item, uom)
+		if not conversion_factor:
+			continue
+		rate = flt(row.price_list_rate)
+		if rate < 0:
+			continue
+		prices.append(
+			{
+				"item_price": row.name,
+				"price_list": row.price_list,
+				"rate": rate,
+				"uom": uom,
+				"supplier": row.supplier,
+				"currency": row.currency,
+				"stock_rate": rate / conversion_factor,
+				"merchant_url": row.get("si_merchant_url"),
+				"last_verified_on": row.get("si_last_verified_on"),
+			}
+		)
+	return prices
+
+
+def _purchase_defaults(item, company: str) -> dict[str, Any]:
+	price_list = _paper_buying_price_list()
+	prices = _buying_prices(item, price_list)
+	supplier = _item_default_supplier(item, company)
+	if not supplier:
+		price_suppliers = {price["supplier"] for price in prices if _active_supplier(price["supplier"])}
+		if len(price_suppliers) == 1:
+			supplier = price_suppliers.pop()
+	return {
+		"default_supplier": supplier,
+		"buying_price_list": price_list,
+		"buying_prices": prices,
+	}
 
 
 def _balance(item_code: str, warehouse: str, batch_no: str | None = None) -> float:
@@ -220,7 +313,7 @@ def resolve_scan(code: str, action: str, warehouse: str | None = None) -> dict:
 	warehouse = warehouse or frappe.defaults.get_user_default("Warehouse")
 	if not warehouse:
 		frappe.throw(_("Choose a Warehouse before scanning."), frappe.ValidationError)
-	_warehouse_company(warehouse)
+	company = _warehouse_company(warehouse)
 
 	batch = None
 	item_code = None
@@ -277,7 +370,7 @@ def resolve_scan(code: str, action: str, warehouse: str | None = None) -> dict:
 			}
 		)
 
-	return {
+	result = {
 		"scan_code": raw_code,
 		"item_code": item.name,
 		"item_name": item.item_name,
@@ -292,6 +385,9 @@ def resolve_scan(code: str, action: str, warehouse: str | None = None) -> dict:
 		"warehouse": warehouse,
 		"current_qty": _balance(item.name, warehouse, batch.name if batch else None),
 	}
+	if action == "receive":
+		result.update(_purchase_defaults(item, company))
+	return result
 
 
 @frappe.whitelist(methods=["POST"])
