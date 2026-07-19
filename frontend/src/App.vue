@@ -79,6 +79,7 @@ const activity = ref([]);
 const labels = ref([]);
 const selectedLabelCodes = ref([]);
 const assigningBarcodes = ref(false);
+const barcodeAssignmentProgress = ref(null);
 const labelQuery = ref("");
 const activityQuery = ref("");
 const toast = ref(null);
@@ -483,19 +484,37 @@ function printLabels() {
 async function assignInternalBarcodes() {
   if (!form.warehouse || !missingInternalBarcodeCount.value) return;
   assigningBarcodes.value = true;
+  const total = missingInternalBarcodeCount.value;
+  let count = 0;
+  barcodeAssignmentProgress.value = { completed: 0, total };
   try {
-    const result = await call("assign_missing_internal_barcodes", { warehouse: form.warehouse });
-    labels.value = result.labels;
-    selectedLabelCodes.value = [];
-    const count = result.created.length;
+    while (true) {
+      const result = await call("assign_missing_internal_barcodes", {
+        warehouse: form.warehouse,
+        limit: 100,
+      });
+      count += result.created.length;
+      barcodeAssignmentProgress.value = { completed: total - result.remaining, total };
+      if (!result.remaining) break;
+      if (!result.created.length) throw new Error("Barcode assignment made no progress.");
+    }
+    await loadLabels();
     toast.value = {
       title: count ? "Internal barcodes assigned" : "Barcodes already assigned",
       message: count ? `${count} Items now have fixed-length inventory barcodes.` : "No Items needed a barcode.",
     };
   } catch (error) {
-    toast.value = { title: "Barcodes not assigned", message: apiError(error) };
+    await loadLabels();
+    const remaining = missingInternalBarcodeCount.value;
+    toast.value = {
+      title: count ? "Barcode assignment paused" : "Barcodes not assigned",
+      message: count
+        ? `${count} assigned; ${remaining} remain. Run the assignment again to resume. ${apiError(error)}`
+        : apiError(error),
+    };
   } finally {
     assigningBarcodes.value = false;
+    barcodeAssignmentProgress.value = null;
   }
 }
 
@@ -632,7 +651,7 @@ onMounted(async () => {
               <label class="compact-search label-search"><Search :size="14" /><input v-model="labelQuery" placeholder="Search name, SKU, or unit" aria-label="Search inventory labels" /><button v-if="labelQuery" class="search-clear" type="button" aria-label="Clear label search" @click="labelQuery = ''"><X :size="13" /></button></label>
               <span class="label-count">{{ filteredLabels.length === labels.length ? `${labels.length} labels` : `${filteredLabels.length} of ${labels.length} labels` }} · {{ form.warehouse }}</span>
             </div>
-            <div class="label-actions"><button v-if="options.permissions?.manage_labels && missingInternalBarcodeCount" class="button subtle" type="button" :disabled="assigningBarcodes" @click="assignInternalBarcodes"><ScanBarcode :size="14" /> {{ assigningBarcodes ? 'Assigning…' : `Assign ${missingInternalBarcodeCount} ${missingInternalBarcodeCount === 1 ? 'barcode' : 'barcodes'}` }}</button><button class="button subtle" type="button" :disabled="!assignedFilteredLabels.length" @click="toggleAllLabels">{{ allFilteredLabelsSelected ? 'Clear results' : 'Select results' }}</button><button class="button primary" type="button" :disabled="!selectedLabelCodes.length" @click="printLabels"><Printer :size="14" /> Print selected<span v-if="selectedLabelCodes.length"> ({{ selectedLabelCodes.length }})</span></button></div>
+            <div class="label-actions"><button v-if="options.permissions?.manage_labels && missingInternalBarcodeCount" class="button subtle" type="button" :disabled="assigningBarcodes" @click="assignInternalBarcodes"><ScanBarcode :size="14" /> {{ assigningBarcodes ? `Assigning ${barcodeAssignmentProgress.completed} of ${barcodeAssignmentProgress.total}…` : `Assign ${missingInternalBarcodeCount} ${missingInternalBarcodeCount === 1 ? 'barcode' : 'barcodes'}` }}</button><button class="button subtle" type="button" :disabled="!assignedFilteredLabels.length" @click="toggleAllLabels">{{ allFilteredLabelsSelected ? 'Clear results' : 'Select results' }}</button><button class="button primary" type="button" :disabled="!selectedLabelCodes.length" @click="printLabels"><Printer :size="14" /> Print selected<span v-if="selectedLabelCodes.length"> ({{ selectedLabelCodes.length }})</span></button></div>
           </div>
           <div class="label-grid">
             <article v-for="label in filteredLabels" :key="label.item_code" class="label-card" :class="{ selected: selectedLabelCodes.includes(label.label_code), unassigned: !label.has_internal_barcode }">

@@ -22,6 +22,7 @@ class ApiImportTests(unittest.TestCase):
 		frappe_naming = types.ModuleType("frappe.model.naming")
 		frappe_naming.make_autoname = lambda series: "INV000043" if series == "INV######" else "SIB.000001"
 		frappe_utils = types.ModuleType("frappe.utils")
+		frappe_utils.cint = lambda value: int(value)
 		frappe_utils.flt = float
 		frappe_utils.now_datetime = lambda: None
 		frappe_utils.nowdate = lambda: None
@@ -76,6 +77,11 @@ class ApiImportTests(unittest.TestCase):
 			item_name="Hahnemühle — Torchon — 285 GSM — 13 × 19 in",
 			stock_uom="Sheet",
 		)
+		card = types.SimpleNamespace(
+			name="P-HAHN-BAMBOO-290-C-5X7",
+			item_name="Hahnemühle — Bamboo — 290 GSM — 5 × 7 in cards",
+			stock_uom="Card Set",
+		)
 		queried_doctypes = []
 
 		def get_all_list(doctype, **kwargs):
@@ -119,16 +125,16 @@ class ApiImportTests(unittest.TestCase):
 				self.saved = True
 
 		sheet_doc = ItemDoc(sheet.name)
-		module._inventory_label_items = lambda: [roll, sheet]
+		module._inventory_label_items = lambda: [roll, sheet, card]
 		module._internal_barcodes_by_item = lambda _names: {roll.name: "INV000042"}
 		module._next_internal_barcode = lambda: "INV000043"
-		module.get_inventory_labels = lambda _warehouse: ["refreshed"]
 		frappe.get_doc = lambda doctype, name: sheet_doc if (doctype, name) == ("Item", sheet.name) else None
 
-		assignment = module.assign_missing_internal_barcodes("Stores - LPS")
+		assignment = module.assign_missing_internal_barcodes("Stores - LPS", limit=1)
 		self.assertEqual(assignment["created"], [{"item_code": sheet.name, "barcode": "INV000043"}])
-		self.assertEqual(assignment["existing"], 1)
-		self.assertEqual(assignment["labels"], ["refreshed"])
+		self.assertEqual(assignment["assigned"], 2)
+		self.assertEqual(assignment["remaining"], 1)
+		self.assertEqual(assignment["total"], 3)
 		self.assertEqual(sheet_doc.checked_permission, "write")
 		self.assertEqual(sheet_doc.appended_fieldname, "barcodes")
 		self.assertEqual(sheet_doc.barcodes[0].barcode, "INV000043")

@@ -7,7 +7,7 @@ from typing import Any
 import frappe
 from frappe import _
 from frappe.model.naming import make_autoname
-from frappe.utils import flt, now_datetime, nowdate, nowtime
+from frappe.utils import cint, flt, now_datetime, nowdate, nowtime
 
 from studio_inventory.domain import (
 	DomainError,
@@ -21,6 +21,7 @@ APP_MARKER = "[Studio Inventory]"
 BATCH_NAMING_SERIES = "SIB.######"
 INTERNAL_BARCODE_NAMING_SERIES = "INV######"
 INTERNAL_BARCODE_PATTERN = re.compile(r"^INV\d{6}$")
+INTERNAL_BARCODE_ASSIGNMENT_LIMIT = 100
 TRANSACTION_DOCTYPES = ("Purchase Receipt", "Stock Entry", "Stock Reconciliation")
 VALID_ACTIONS = ("receive", "consume", "count")
 
@@ -723,15 +724,15 @@ def get_inventory_labels(warehouse: str) -> list[dict]:
 
 
 @frappe.whitelist(methods=["POST"])
-def assign_missing_internal_barcodes(warehouse: str) -> dict:
+def assign_missing_internal_barcodes(warehouse: str, limit: int = INTERNAL_BARCODE_ASSIGNMENT_LIMIT) -> dict:
 	_warehouse_company(warehouse)
 	frappe.has_permission("Item", ptype="write", throw=True)
 	items = _inventory_label_items()
 	internal_barcodes = _internal_barcodes_by_item([item.name for item in items])
+	batch_size = min(max(cint(limit), 1), INTERNAL_BARCODE_ASSIGNMENT_LIMIT)
 	created = []
-	for item in items:
-		if item.name in internal_barcodes:
-			continue
+	missing_items = [item for item in items if item.name not in internal_barcodes]
+	for item in missing_items[:batch_size]:
 		doc = frappe.get_doc("Item", item.name)
 		doc.check_permission("write")
 		current = next(
@@ -753,6 +754,7 @@ def assign_missing_internal_barcodes(warehouse: str) -> dict:
 
 	return {
 		"created": created,
-		"existing": len(items) - len(created),
-		"labels": get_inventory_labels(warehouse),
+		"assigned": len(internal_barcodes),
+		"remaining": len(items) - len(internal_barcodes),
+		"total": len(items),
 	}
