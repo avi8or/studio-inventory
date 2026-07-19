@@ -13,6 +13,8 @@ async function render() {
     width: 1.45,
     height: 46,
     margin: 0,
+    marginLeft: 15,
+    marginRight: 15,
     displayValue: false,
     background: "transparent",
   });

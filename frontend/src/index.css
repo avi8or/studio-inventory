@@ -1087,6 +1087,10 @@ select:disabled {
   border-color: var(--surface-gray-9);
 }
 
+.label-card.unassigned {
+  border-style: dashed;
+}
+
 .label-checkbox {
   position: absolute;
   top: 13px;
@@ -1141,6 +1145,21 @@ select:disabled {
 
 .barcode-wrap svg {
   max-width: 100%;
+}
+
+.label-card .barcode-wrap svg {
+  width: min(280px, 100%);
+  height: 56px;
+}
+
+.barcode-placeholder {
+  display: grid;
+  width: min(280px, 100%);
+  height: 56px;
+  place-items: center;
+  border: 1px dashed var(--outline-gray);
+  color: var(--ink-gray-5);
+  font-size: 11px;
 }
 
 .command-card-page {
@@ -1855,12 +1874,16 @@ select:disabled {
   }
 
   .print-label-card .barcode-wrap {
-    min-height: 0.72in;
+    min-height: 0;
+    height: 0.64in;
     margin-top: 0.08in;
   }
 
   .print-label-card .barcode-wrap svg {
-    max-height: 0.72in;
+    width: 3.15in;
+    height: 0.55in;
+    max-width: 100%;
+    max-height: none;
   }
 
   .label-checkbox {

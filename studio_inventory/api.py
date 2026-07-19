@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import frappe
@@ -18,6 +19,8 @@ from studio_inventory.domain import (
 
 APP_MARKER = "[Studio Inventory]"
 BATCH_NAMING_SERIES = "SIB.######"
+INTERNAL_BARCODE_NAMING_SERIES = "INV######"
+INTERNAL_BARCODE_PATTERN = re.compile(r"^INV\d{6}$")
 TRANSACTION_DOCTYPES = ("Purchase Receipt", "Stock Entry", "Stock Reconciliation")
 VALID_ACTIONS = ("receive", "consume", "count")
 
@@ -176,6 +179,7 @@ def get_options() -> dict:
 			and frappe.has_permission("Stock Entry", ptype="submit"),
 			"count": frappe.has_permission("Stock Reconciliation", ptype="create")
 			and frappe.has_permission("Stock Reconciliation", ptype="submit"),
+			"manage_labels": frappe.has_permission("Item", ptype="write"),
 		},
 	}
 
@@ -636,10 +640,24 @@ def _get_all_list(doctype: str, *, page_length: int = 500, **kwargs) -> list:
 		start += len(page)
 
 
-@frappe.whitelist(methods=["POST"])
-def get_inventory_labels(warehouse: str) -> list[dict]:
-	_warehouse_company(warehouse)
-	items = _get_all_list(
+def _get_all_rows(doctype: str, *, page_length: int = 500, **kwargs) -> list:
+	rows = []
+	start = 0
+	while True:
+		page = frappe.get_all(
+			doctype,
+			limit_start=start,
+			limit_page_length=page_length,
+			**kwargs,
+		)
+		rows.extend(page)
+		if len(page) < page_length:
+			return rows
+		start += len(page)
+
+
+def _inventory_label_items() -> list:
+	return _get_all_list(
 		"Item",
 		filters={
 			"disabled": 0,
@@ -651,11 +669,47 @@ def get_inventory_labels(warehouse: str) -> list[dict]:
 		fields=["name", "item_name", "stock_uom"],
 		order_by="item_name asc",
 	)
+
+
+def _internal_barcodes_by_item(item_names: list[str]) -> dict[str, str]:
+	if not item_names:
+		return {}
+	rows = _get_all_rows(
+		"Item Barcode",
+		filters={"parent": ("in", item_names)},
+		fields=["parent", "barcode", "idx"],
+		order_by="parent asc, idx asc",
+	)
+	barcodes = {}
+	for row in rows:
+		if row.parent not in barcodes and INTERNAL_BARCODE_PATTERN.fullmatch((row.barcode or "").strip()):
+			barcodes[row.parent] = row.barcode.strip()
+	return barcodes
+
+
+def _next_internal_barcode() -> str:
+	for _attempt in range(100):
+		barcode = make_autoname(INTERNAL_BARCODE_NAMING_SERIES)
+		if not INTERNAL_BARCODE_PATTERN.fullmatch(barcode):
+			frappe.throw(_("The internal barcode series has exhausted its six-digit capacity."))
+		if not frappe.db.exists("Item Barcode", {"barcode": barcode}):
+			return barcode
+	frappe.throw(_("Could not allocate a unique internal inventory barcode."))
+	return ""
+
+
+@frappe.whitelist(methods=["POST"])
+def get_inventory_labels(warehouse: str) -> list[dict]:
+	_warehouse_company(warehouse)
+	items = _inventory_label_items()
+	internal_barcodes = _internal_barcodes_by_item([item.name for item in items])
 	labels = []
 	for item in items:
+		internal_barcode = internal_barcodes.get(item.name)
 		labels.append(
 			{
-				"label_code": item.name,
+				"label_code": internal_barcode or item.name,
+				"has_internal_barcode": bool(internal_barcode),
 				"tracking": "Item",
 				"batch_no": None,
 				"item_code": item.name,
@@ -666,3 +720,39 @@ def get_inventory_labels(warehouse: str) -> list[dict]:
 		)
 	labels.sort(key=lambda label: (label["item_name"].casefold(), label["label_code"].casefold()))
 	return labels
+
+
+@frappe.whitelist(methods=["POST"])
+def assign_missing_internal_barcodes(warehouse: str) -> dict:
+	_warehouse_company(warehouse)
+	frappe.has_permission("Item", ptype="write", throw=True)
+	items = _inventory_label_items()
+	internal_barcodes = _internal_barcodes_by_item([item.name for item in items])
+	created = []
+	for item in items:
+		if item.name in internal_barcodes:
+			continue
+		doc = frappe.get_doc("Item", item.name)
+		doc.check_permission("write")
+		current = next(
+			(
+				row.barcode.strip()
+				for row in doc.barcodes
+				if INTERNAL_BARCODE_PATTERN.fullmatch((row.barcode or "").strip())
+			),
+			None,
+		)
+		if current:
+			internal_barcodes[item.name] = current
+			continue
+		barcode = _next_internal_barcode()
+		doc.append("barcodes", {"barcode": barcode})
+		doc.save()
+		internal_barcodes[item.name] = barcode
+		created.append({"item_code": item.name, "barcode": barcode})
+
+	return {
+		"created": created,
+		"existing": len(items) - len(created),
+		"labels": get_inventory_labels(warehouse),
+	}

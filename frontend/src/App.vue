@@ -78,6 +78,7 @@ const saving = ref(false);
 const activity = ref([]);
 const labels = ref([]);
 const selectedLabelCodes = ref([]);
+const assigningBarcodes = ref(false);
 const labelQuery = ref("");
 const activityQuery = ref("");
 const toast = ref(null);
@@ -153,10 +154,18 @@ const filteredActivity = computed(() => {
 
 const filteredLabels = computed(() => filterLabels(labels.value, labelQuery.value));
 
+const assignedFilteredLabels = computed(() =>
+  filteredLabels.value.filter((label) => label.has_internal_barcode),
+);
+
+const missingInternalBarcodeCount = computed(
+  () => labels.value.filter((label) => !label.has_internal_barcode).length,
+);
+
 const allFilteredLabelsSelected = computed(
   () =>
-    filteredLabels.value.length > 0 &&
-    filteredLabels.value.every((label) => selectedLabelCodes.value.includes(label.label_code)),
+    assignedFilteredLabels.value.length > 0 &&
+    assignedFilteredLabels.value.every((label) => selectedLabelCodes.value.includes(label.label_code)),
 );
 
 const printableLabels = computed(() =>
@@ -471,12 +480,31 @@ function printLabels() {
   window.print();
 }
 
+async function assignInternalBarcodes() {
+  if (!form.warehouse || !missingInternalBarcodeCount.value) return;
+  assigningBarcodes.value = true;
+  try {
+    const result = await call("assign_missing_internal_barcodes", { warehouse: form.warehouse });
+    labels.value = result.labels;
+    selectedLabelCodes.value = [];
+    const count = result.created.length;
+    toast.value = {
+      title: count ? "Internal barcodes assigned" : "Barcodes already assigned",
+      message: count ? `${count} Items now have fixed-length inventory barcodes.` : "No Items needed a barcode.",
+    };
+  } catch (error) {
+    toast.value = { title: "Barcodes not assigned", message: apiError(error) };
+  } finally {
+    assigningBarcodes.value = false;
+  }
+}
+
 function printCommandCard() {
   window.print();
 }
 
 function toggleAllLabels() {
-  selectedLabelCodes.value = toggleVisibleSelection(selectedLabelCodes.value, filteredLabels.value);
+  selectedLabelCodes.value = toggleVisibleSelection(selectedLabelCodes.value, assignedFilteredLabels.value);
 }
 
 onMounted(async () => {
@@ -604,21 +632,21 @@ onMounted(async () => {
               <label class="compact-search label-search"><Search :size="14" /><input v-model="labelQuery" placeholder="Search name, SKU, or unit" aria-label="Search inventory labels" /><button v-if="labelQuery" class="search-clear" type="button" aria-label="Clear label search" @click="labelQuery = ''"><X :size="13" /></button></label>
               <span class="label-count">{{ filteredLabels.length === labels.length ? `${labels.length} labels` : `${filteredLabels.length} of ${labels.length} labels` }} · {{ form.warehouse }}</span>
             </div>
-            <div class="label-actions"><button class="button subtle" type="button" :disabled="!filteredLabels.length" @click="toggleAllLabels">{{ allFilteredLabelsSelected ? 'Clear results' : 'Select results' }}</button><button class="button primary" type="button" :disabled="!selectedLabelCodes.length" @click="printLabels"><Printer :size="14" /> Print selected<span v-if="selectedLabelCodes.length"> ({{ selectedLabelCodes.length }})</span></button></div>
+            <div class="label-actions"><button v-if="options.permissions?.manage_labels && missingInternalBarcodeCount" class="button subtle" type="button" :disabled="assigningBarcodes" @click="assignInternalBarcodes"><ScanBarcode :size="14" /> {{ assigningBarcodes ? 'Assigning…' : `Assign ${missingInternalBarcodeCount} ${missingInternalBarcodeCount === 1 ? 'barcode' : 'barcodes'}` }}</button><button class="button subtle" type="button" :disabled="!assignedFilteredLabels.length" @click="toggleAllLabels">{{ allFilteredLabelsSelected ? 'Clear results' : 'Select results' }}</button><button class="button primary" type="button" :disabled="!selectedLabelCodes.length" @click="printLabels"><Printer :size="14" /> Print selected<span v-if="selectedLabelCodes.length"> ({{ selectedLabelCodes.length }})</span></button></div>
           </div>
           <div class="label-grid">
-            <article v-for="label in filteredLabels" :key="label.label_code" class="label-card" :class="{ selected: selectedLabelCodes.includes(label.label_code) }">
-              <input v-model="selectedLabelCodes" class="label-checkbox" type="checkbox" :value="label.label_code" :aria-label="`Select ${label.item_name} ${label.tracking} label`" />
+            <article v-for="label in filteredLabels" :key="label.item_code" class="label-card" :class="{ selected: selectedLabelCodes.includes(label.label_code), unassigned: !label.has_internal_barcode }">
+              <input v-model="selectedLabelCodes" class="label-checkbox" type="checkbox" :value="label.label_code" :disabled="!label.has_internal_barcode" :aria-label="`Select ${label.item_name} ${label.tracking} label`" />
               <strong>{{ label.item_name }}</strong><span>{{ label.item_code }}</span>
-              <div class="barcode-wrap"><BarcodeSvg :value="label.label_code" /></div>
-              <code>{{ label.label_code }}</code><em>Reusable Item label · {{ formatNumber(label.remaining) }} {{ formatUnit(label.stock_uom, label.remaining) }} on hand</em>
+              <div class="barcode-wrap"><BarcodeSvg v-if="label.has_internal_barcode" :value="label.label_code" /><div v-else class="barcode-placeholder">Assign an internal barcode</div></div>
+              <code>{{ label.has_internal_barcode ? label.label_code : 'Not assigned' }}</code><em>Reusable Item label · {{ formatNumber(label.remaining) }} {{ formatUnit(label.stock_uom, label.remaining) }} on hand</em>
             </article>
             <div v-if="!labels.length" class="empty-list">No roll, sheet, or card Items were found for this Warehouse.</div>
             <div v-else-if="!filteredLabels.length" class="empty-list">No labels match “{{ labelQuery }}”.</div>
           </div>
           <div class="print-label-pages" aria-hidden="true">
             <section v-for="(page, pageIndex) in printableLabelPages" :key="`print-page-${pageIndex}`" class="print-label-page">
-              <article v-for="label in page" :key="`print-${label.label_code}`" class="label-card print-label-card">
+              <article v-for="label in page" :key="`print-${label.item_code}`" class="label-card print-label-card">
                 <strong>{{ label.item_name }}</strong><span>{{ label.item_code }}</span>
                 <div class="barcode-wrap"><BarcodeSvg :value="label.label_code" /></div>
                 <code>{{ label.label_code }}</code><em>Reusable Item label</em>

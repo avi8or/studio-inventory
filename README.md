@@ -40,10 +40,12 @@ It does not enable Frappe CRM's broad Item-to-Product synchronization. A
 Customer is created or linked only when an accepted CRM Deal quotation becomes
 a Sales Order.
 
-The Labels view prints reusable Code 128 Item labels for rolls, sheets, and
-card sets. Rolls are counted in feet, while packs are counted in their Stock
+The Labels view assigns and prints reusable fixed-length Code 128 Item barcodes
+for rolls, sheets, and card sets. The generated `INV######` value is stored in
+the native Item Barcodes table without replacing manufacturer or legacy
+barcodes. Rolls are counted in feet, while packs are counted in their Stock
 UOM. Multiple physical packages of the same Item intentionally share one
-scannable Item code and one aggregate warehouse balance.
+scannable Item barcode and one aggregate warehouse balance.
 
 The Command card view prints a letter-size scanner control sheet intended for
 matte lamination. Its QR codes open the app or deep-link directly to Receive,

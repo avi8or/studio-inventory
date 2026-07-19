@@ -12,6 +12,7 @@ class ApiImportTests(unittest.TestCase):
 		frappe.__path__ = []
 		frappe._ = lambda value: value
 		frappe.whitelist = lambda **_kwargs: lambda function: function
+		frappe.has_permission = lambda *_args, **_kwargs: True
 		frappe.ValidationError = type("ValidationError", (Exception,), {})
 		frappe.DoesNotExistError = type("DoesNotExistError", (Exception,), {})
 		frappe.PermissionError = type("PermissionError", (Exception,), {})
@@ -19,7 +20,7 @@ class ApiImportTests(unittest.TestCase):
 		frappe_model = types.ModuleType("frappe.model")
 		frappe_model.__path__ = []
 		frappe_naming = types.ModuleType("frappe.model.naming")
-		frappe_naming.make_autoname = lambda _series: "SIB.000001"
+		frappe_naming.make_autoname = lambda series: "INV000043" if series == "INV######" else "SIB.000001"
 		frappe_utils = types.ModuleType("frappe.utils")
 		frappe_utils.flt = float
 		frappe_utils.now_datetime = lambda: None
@@ -85,12 +86,53 @@ class ApiImportTests(unittest.TestCase):
 		module._warehouse_company = lambda warehouse: "Lightpress"
 		module._get_all_list = get_all_list
 		module._balance = lambda *_args, **_kwargs: 39.37
+		frappe.get_all = lambda doctype, **_kwargs: [
+			types.SimpleNamespace(parent=roll.name, barcode="P-HAHN-TORCHON-285-R-24", idx=1),
+			types.SimpleNamespace(parent=roll.name, barcode="INV000042", idx=2),
+		] if doctype == "Item Barcode" else []
 
 		labels = module.get_inventory_labels("Stores - LPS")
-		roll_item_label = next(label for label in labels if label["label_code"] == roll.name)
+		roll_item_label = next(label for label in labels if label["item_code"] == roll.name)
+		sheet_item_label = next(label for label in labels if label["item_code"] == sheet.name)
 		self.assertEqual(queried_doctypes, ["Item"])
 		self.assertEqual(len(labels), 2)
 		self.assertEqual(roll_item_label["tracking"], "Item")
+		self.assertEqual(roll_item_label["label_code"], "INV000042")
+		self.assertTrue(roll_item_label["has_internal_barcode"])
+		self.assertEqual(sheet_item_label["label_code"], sheet.name)
+		self.assertFalse(sheet_item_label["has_internal_barcode"])
+
+		class ItemDoc:
+			def __init__(self, name):
+				self.name = name
+				self.barcodes = []
+				self.saved = False
+
+			def check_permission(self, permission):
+				self.checked_permission = permission
+
+			def append(self, fieldname, value):
+				self.appended_fieldname = fieldname
+				self.barcodes.append(types.SimpleNamespace(**value))
+
+			def save(self):
+				self.saved = True
+
+		sheet_doc = ItemDoc(sheet.name)
+		module._inventory_label_items = lambda: [roll, sheet]
+		module._internal_barcodes_by_item = lambda _names: {roll.name: "INV000042"}
+		module._next_internal_barcode = lambda: "INV000043"
+		module.get_inventory_labels = lambda _warehouse: ["refreshed"]
+		frappe.get_doc = lambda doctype, name: sheet_doc if (doctype, name) == ("Item", sheet.name) else None
+
+		assignment = module.assign_missing_internal_barcodes("Stores - LPS")
+		self.assertEqual(assignment["created"], [{"item_code": sheet.name, "barcode": "INV000043"}])
+		self.assertEqual(assignment["existing"], 1)
+		self.assertEqual(assignment["labels"], ["refreshed"])
+		self.assertEqual(sheet_doc.checked_permission, "write")
+		self.assertEqual(sheet_doc.appended_fieldname, "barcodes")
+		self.assertEqual(sheet_doc.barcodes[0].barcode, "INV000043")
+		self.assertTrue(sheet_doc.saved)
 
 
 if __name__ == "__main__":
