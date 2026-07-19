@@ -19,7 +19,7 @@ from studio_inventory.domain import (
 
 APP_MARKER = "[Studio Inventory]"
 BATCH_NAMING_SERIES = "SIB.######"
-INTERNAL_BARCODE_NAMING_SERIES = "INV######"
+INTERNAL_BARCODE_NAMING_SERIES = "INV.######"
 INTERNAL_BARCODE_PATTERN = re.compile(r"^INV\d{6}$")
 INTERNAL_BARCODE_ASSIGNMENT_LIMIT = 100
 TRANSACTION_DOCTYPES = ("Purchase Receipt", "Stock Entry", "Stock Reconciliation")

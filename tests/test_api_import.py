@@ -20,7 +20,7 @@ class ApiImportTests(unittest.TestCase):
 		frappe_model = types.ModuleType("frappe.model")
 		frappe_model.__path__ = []
 		frappe_naming = types.ModuleType("frappe.model.naming")
-		frappe_naming.make_autoname = lambda series: "INV000043" if series == "INV######" else "SIB.000001"
+		frappe_naming.make_autoname = lambda series: "INV000043" if series == "INV.######" else "SIB.000001"
 		frappe_utils = types.ModuleType("frappe.utils")
 		frappe_utils.cint = lambda value: int(value)
 		frappe_utils.flt = float
