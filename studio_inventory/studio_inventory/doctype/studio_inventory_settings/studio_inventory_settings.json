@@ -1,0 +1,41 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "internal_barcode_prefix"
+ ],
+ "fields": [
+  {
+   "default": "SI",
+   "description": "Used for app-generated Code 128 Item barcodes. Choose this before assigning labels and avoid changing it afterward.",
+   "fieldname": "internal_barcode_prefix",
+   "fieldtype": "Data",
+   "label": "Internal Barcode Prefix",
+   "length": 6,
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "module": "Studio Inventory",
+ "name": "Studio Inventory Settings",
+ "permissions": [
+  {
+   "create": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Stock Manager",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -6,7 +6,7 @@ from typing import Any
 
 import frappe
 from frappe import _
-from frappe.model.naming import make_autoname
+from frappe.model.naming import NamingSeries, make_autoname
 from frappe.utils import cint, flt, now_datetime, nowdate, nowtime
 
 from studio_inventory.domain import (
@@ -16,11 +16,13 @@ from studio_inventory.domain import (
 	physical_units_for_uom,
 	plan_receipt,
 )
+from studio_inventory.pricing import parse_paper_dimensions
 
 APP_MARKER = "[Studio Inventory]"
 BATCH_NAMING_SERIES = "SIB.######"
-INTERNAL_BARCODE_NAMING_SERIES = "INV.######"
-INTERNAL_BARCODE_PATTERN = re.compile(r"^INV\d{6}$")
+DEFAULT_INTERNAL_BARCODE_PREFIX = "SI"
+INTERNAL_BARCODE_PREFIX_PATTERN = re.compile(r"^[A-Z]{2,6}$")
+LEGACY_INTERNAL_BARCODE_PATTERN = re.compile(r"^INV\d{6}$")
 INTERNAL_BARCODE_ASSIGNMENT_LIMIT = 100
 TRANSACTION_DOCTYPES = ("Purchase Receipt", "Stock Entry", "Stock Reconciliation")
 VALID_ACTIONS = ("receive", "consume", "count")
@@ -28,6 +30,25 @@ VALID_ACTIONS = ("receive", "consume", "count")
 
 def _throw_domain(error: DomainError) -> None:
 	frappe.throw(_(str(error)), frappe.ValidationError)
+
+
+def _internal_barcode_prefix() -> str:
+	settings = frappe.get_cached_doc("Studio Inventory Settings")
+	prefix = (settings.internal_barcode_prefix or DEFAULT_INTERNAL_BARCODE_PREFIX).strip().upper()
+	if not INTERNAL_BARCODE_PREFIX_PATTERN.fullmatch(prefix):
+		frappe.throw(
+			_("Studio Inventory Settings needs an internal barcode prefix of 2–6 letters."),
+			frappe.ValidationError,
+		)
+	return prefix
+
+
+def _internal_barcode_series(prefix: str | None = None) -> str:
+	return f"{prefix or _internal_barcode_prefix()}.######"
+
+
+def _internal_barcode_pattern(prefix: str | None = None) -> re.Pattern[str]:
+	return re.compile(rf"^{re.escape(prefix or _internal_barcode_prefix())}\d{{6}}$")
 
 
 def _payload(value: dict | str) -> dict[str, Any]:
@@ -170,6 +191,7 @@ def get_options() -> dict:
 	return {
 		"warehouses": warehouses,
 		"suppliers": suppliers,
+		"internal_barcode_prefix": _internal_barcode_prefix(),
 		"default_company": default_company,
 		"default_warehouse": default_warehouse,
 		"default_supplier": frappe.defaults.get_user_default("Supplier"),
@@ -667,31 +689,161 @@ def _inventory_label_items() -> list:
 			"item_group": "Paper",
 			"stock_uom": ("in", ["Foot", "Sheet", "Card Set"]),
 		},
-		fields=["name", "item_name", "stock_uom"],
-		order_by="item_name asc",
+		fields=["name", "item_name", "stock_uom", "brand", "variant_of"],
+		order_by="brand asc, item_name asc",
 	)
 
 
-def _internal_barcodes_by_item(item_names: list[str]) -> dict[str, str]:
+def _inventory_barcode_maps(item_names: list[str]) -> tuple[dict[str, str], dict[str, str]]:
 	if not item_names:
-		return {}
+		return {}, {}
 	rows = _get_all_rows(
 		"Item Barcode",
 		filters={"parent": ("in", item_names)},
 		fields=["parent", "barcode", "idx"],
 		order_by="parent asc, idx asc",
 	)
-	barcodes = {}
+	current = {}
+	legacy = {}
+	current_pattern = _internal_barcode_pattern()
 	for row in rows:
-		if row.parent not in barcodes and INTERNAL_BARCODE_PATTERN.fullmatch((row.barcode or "").strip()):
-			barcodes[row.parent] = row.barcode.strip()
-	return barcodes
+		barcode = (row.barcode or "").strip()
+		if row.parent not in current and current_pattern.fullmatch(barcode):
+			current[row.parent] = barcode
+		if row.parent not in legacy and LEGACY_INTERNAL_BARCODE_PATTERN.fullmatch(barcode):
+			legacy[row.parent] = barcode
+	return current, legacy
+
+
+def _internal_barcodes_by_item(item_names: list[str]) -> dict[str, str]:
+	return _inventory_barcode_maps(item_names)[0]
+
+
+def _variant_attributes_by_item(item_names: list[str]) -> dict[str, dict[str, str]]:
+	if not item_names:
+		return {}
+	rows = _get_all_rows(
+		"Item Variant Attribute",
+		filters={"parent": ("in", item_names)},
+		fields=["parent", "attribute", "attribute_value"],
+		order_by="parent asc, idx asc",
+	)
+	attributes: dict[str, dict[str, str]] = {}
+	for row in rows:
+		attributes.setdefault(row.parent, {})[(row.attribute or "").strip().casefold()] = (
+			row.attribute_value or ""
+		).strip()
+	return attributes
+
+
+def _template_items_by_name(template_names: list[str]) -> dict[str, object]:
+	names = sorted(set(filter(None, template_names)))
+	if not names:
+		return {}
+	return {
+		row.name: row
+		for row in _get_all_list(
+			"Item",
+			filters={"name": ("in", names)},
+			fields=["name", "item_name", "brand"],
+			order_by="name asc",
+		)
+	}
+
+
+def _paper_line(item, template, manufacturer: str) -> str:
+	display_name = ((template.item_name if template else item.item_name) or item.name).strip()
+	if manufacturer:
+		display_name = re.sub(
+			rf"^{re.escape(manufacturer)}\s*(?:[—–\-·:]\s*)?",
+			"",
+			display_name,
+			count=1,
+			flags=re.IGNORECASE,
+		).strip()
+	if not template:
+		if item.stock_uom == "Foot":
+			display_name = re.sub(
+				r"\s*(?:[—–\-]\s*)?\d+(?:\.\d+)?\s*(?:in|inch|inches|\")?\s*(?:wide|width|roll)?\s*$",
+				"",
+				display_name,
+				flags=re.IGNORECASE,
+			).strip()
+		else:
+			display_name = re.sub(
+				r"\s*(?:[—–\-]\s*)?\d+(?:\.\d+)?\s*(?:×|x)\s*\d+(?:\.\d+)?\s*(?:in|inch|inches|\")?\s*(?:cards?|sheets?|packs?)?\s*$",
+				"",
+				display_name,
+				flags=re.IGNORECASE,
+			).strip()
+	return display_name.strip(" —–-·") or item.item_name or item.name
+
+
+def _format_inches(value: float) -> str:
+	return f"{value:g}"
+
+
+def _label_dimensions(stock_uom: str, attributes: dict[str, str]) -> dict:
+	attribute_names = {
+		"Foot": ("roll width",),
+		"Sheet": ("sheet size",),
+		"Card Set": ("sheet size", "card size"),
+	}
+	attribute_value = next(
+		(attributes.get(name) for name in attribute_names.get(stock_uom, ()) if attributes.get(name)),
+		None,
+	)
+	if not attribute_value:
+		return {"size_label": "Size unavailable", "size_key": "", "size_width": None, "size_height": None}
+	try:
+		dimensions = parse_paper_dimensions(
+			stock_uom="Foot" if stock_uom == "Foot" else "Sheet",
+			attribute_value=attribute_value,
+		)
+	except DomainError:
+		return {"size_label": attribute_value, "size_key": attribute_value.casefold(), "size_width": None, "size_height": None}
+
+	if dimensions.height_in is None:
+		width = dimensions.width_in
+		return {
+			"size_label": f'{_format_inches(width)}"',
+			"size_key": _format_inches(width),
+			"size_width": width,
+			"size_height": None,
+		}
+	width, height = sorted((dimensions.width_in, dimensions.height_in))
+	return {
+		"size_label": f'{_format_inches(width)} × {_format_inches(height)}"',
+		"size_key": f"{_format_inches(width)}x{_format_inches(height)}",
+		"size_width": width,
+		"size_height": height,
+	}
+
+
+def _label_metadata(item, template, attributes: dict[str, str]) -> dict:
+	form, form_code = {
+		"Foot": ("ROLL", "R"),
+		"Sheet": ("SHEET", "S"),
+		"Card Set": ("CARD", "C"),
+	}[item.stock_uom]
+	manufacturer = (item.brand or (template.brand if template else None) or "Unspecified manufacturer").strip()
+	dimensions = _label_dimensions(item.stock_uom, attributes)
+	return {
+		"manufacturer": manufacturer,
+		"paper_line": _paper_line(item, template, manufacturer),
+		"form": form,
+		"form_code": form_code,
+		"form_size": f'{form} - {dimensions["size_label"]}',
+		**dimensions,
+	}
 
 
 def _next_internal_barcode() -> str:
+	prefix = _internal_barcode_prefix()
+	pattern = _internal_barcode_pattern(prefix)
 	for _attempt in range(100):
-		barcode = make_autoname(INTERNAL_BARCODE_NAMING_SERIES)
-		if not INTERNAL_BARCODE_PATTERN.fullmatch(barcode):
+		barcode = make_autoname(_internal_barcode_series(prefix))
+		if not pattern.fullmatch(barcode):
 			frappe.throw(_("The internal barcode series has exhausted its six-digit capacity."))
 		if not frappe.db.exists("Item Barcode", {"barcode": barcode}):
 			return barcode
@@ -703,23 +855,40 @@ def _next_internal_barcode() -> str:
 def get_inventory_labels(warehouse: str) -> list[dict]:
 	_warehouse_company(warehouse)
 	items = _inventory_label_items()
-	internal_barcodes = _internal_barcodes_by_item([item.name for item in items])
+	item_names = [item.name for item in items]
+	internal_barcodes, legacy_barcodes = _inventory_barcode_maps(item_names)
+	attributes = _variant_attributes_by_item(item_names)
+	templates = _template_items_by_name([item.variant_of for item in items])
 	labels = []
 	for item in items:
 		internal_barcode = internal_barcodes.get(item.name)
+		legacy_barcode = legacy_barcodes.get(item.name)
+		metadata = _label_metadata(item, templates.get(item.variant_of), attributes.get(item.name, {}))
 		labels.append(
 			{
-				"label_code": internal_barcode or item.name,
+				"label_code": internal_barcode or legacy_barcode or item.name,
 				"has_internal_barcode": bool(internal_barcode),
+				"legacy_internal_barcode": legacy_barcode,
 				"tracking": "Item",
 				"batch_no": None,
 				"item_code": item.name,
 				"item_name": item.item_name,
 				"stock_uom": item.stock_uom,
 				"remaining": _balance(item.name, warehouse),
+				**metadata,
 			}
 		)
-	labels.sort(key=lambda label: (label["item_name"].casefold(), label["label_code"].casefold()))
+	form_order = {"R": 0, "S": 1, "C": 2}
+	labels.sort(
+		key=lambda label: (
+			form_order[label["form_code"]],
+			label["size_width"] if label["size_width"] is not None else float("inf"),
+			label["size_height"] if label["size_height"] is not None else float("inf"),
+			label["manufacturer"].casefold(),
+			label["paper_line"].casefold(),
+			label["item_code"].casefold(),
+		)
+	)
 	return labels
 
 
@@ -729,6 +898,7 @@ def assign_missing_internal_barcodes(warehouse: str, limit: int = INTERNAL_BARCO
 	frappe.has_permission("Item", ptype="write", throw=True)
 	items = _inventory_label_items()
 	internal_barcodes = _internal_barcodes_by_item([item.name for item in items])
+	pattern = _internal_barcode_pattern()
 	batch_size = min(max(cint(limit), 1), INTERNAL_BARCODE_ASSIGNMENT_LIMIT)
 	created = []
 	missing_items = [item for item in items if item.name not in internal_barcodes]
@@ -739,7 +909,7 @@ def assign_missing_internal_barcodes(warehouse: str, limit: int = INTERNAL_BARCO
 			(
 				row.barcode.strip()
 				for row in doc.barcodes
-				if INTERNAL_BARCODE_PATTERN.fullmatch((row.barcode or "").strip())
+				if pattern.fullmatch((row.barcode or "").strip())
 			),
 			None,
 		)
@@ -757,4 +927,71 @@ def assign_missing_internal_barcodes(warehouse: str, limit: int = INTERNAL_BARCO
 		"assigned": len(internal_barcodes),
 		"remaining": len(items) - len(internal_barcodes),
 		"total": len(items),
+	}
+
+
+def _advance_internal_barcode_series(barcodes: list[str]) -> None:
+	if not barcodes:
+		return
+	highest_suffix = max(int(barcode[-6:]) for barcode in barcodes)
+	series = NamingSeries(_internal_barcode_series())
+	if highest_suffix > cint(series.get_current_value() or 0):
+		series.update_counter(highest_suffix)
+
+
+@frappe.whitelist(methods=["POST"])
+def replace_legacy_internal_barcodes(
+	warehouse: str, limit: int = INTERNAL_BARCODE_ASSIGNMENT_LIMIT
+) -> dict:
+	_warehouse_company(warehouse)
+	frappe.has_permission("Item", ptype="write", throw=True)
+	prefix = _internal_barcode_prefix()
+	if prefix == "INV":
+		frappe.throw(_("Choose a new internal barcode prefix before replacing legacy barcodes."))
+
+	items = _inventory_label_items()
+	item_names = [item.name for item in items]
+	legacy_barcodes = _inventory_barcode_maps(item_names)[1]
+	batch_size = min(max(cint(limit), 1), INTERNAL_BARCODE_ASSIGNMENT_LIMIT)
+	legacy_items = [item for item in items if item.name in legacy_barcodes]
+	replaced = []
+
+	for item in legacy_items[:batch_size]:
+		legacy_barcode = legacy_barcodes[item.name]
+		target_barcode = f"{prefix}{legacy_barcode[-6:]}"
+		doc = frappe.get_doc("Item", item.name)
+		doc.check_permission("write")
+		legacy_rows = [
+			row for row in doc.barcodes if LEGACY_INTERNAL_BARCODE_PATTERN.fullmatch((row.barcode or "").strip())
+		]
+		if not legacy_rows:
+			frappe.throw(
+				_("Item {0} no longer has its expected legacy barcode. Refresh Labels and try again.").format(
+					item.name
+				),
+				frappe.ValidationError,
+			)
+		target_rows = [row for row in doc.barcodes if (row.barcode or "").strip() == target_barcode]
+		if target_rows:
+			for row in legacy_rows:
+				doc.remove(row)
+		else:
+			existing_parent = frappe.db.get_value("Item Barcode", {"barcode": target_barcode}, "parent")
+			if existing_parent and existing_parent != item.name:
+				frappe.throw(
+					_("Barcode {0} is already assigned to Item {1}.").format(target_barcode, existing_parent),
+					frappe.ValidationError,
+				)
+			legacy_rows[0].barcode = target_barcode
+			for duplicate in legacy_rows[1:]:
+				doc.remove(duplicate)
+		doc.save()
+		replaced.append({"item_code": item.name, "from": legacy_barcode, "barcode": target_barcode})
+
+	_advance_internal_barcode_series([row["barcode"] for row in replaced])
+	return {
+		"replaced": replaced,
+		"remaining": len(legacy_items) - len(replaced),
+		"total": len(legacy_items),
+		"prefix": prefix,
 	}

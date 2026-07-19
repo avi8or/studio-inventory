@@ -26,7 +26,12 @@ import {
 } from "@lucide/vue";
 import BarcodeSvg from "./BarcodeSvg.vue";
 import ScannerCommandCard from "./ScannerCommandCard.vue";
-import { filterLabels, toggleVisibleSelection } from "./labelCatalog.js";
+import {
+  filterLabels,
+  groupLabels,
+  sortLabels,
+  toggleVisibleSelection,
+} from "./labelCatalog.js";
 import {
   applyNumericKey,
   inventoryModeFromUrl,
@@ -81,6 +86,12 @@ const selectedLabelCodes = ref([]);
 const assigningBarcodes = ref(false);
 const barcodeAssignmentProgress = ref(null);
 const labelQuery = ref("");
+const labelForm = ref("");
+const labelManufacturer = ref("");
+const labelSize = ref("");
+const labelInStock = ref(false);
+const labelSort = ref("size");
+const labelGroup = ref("form");
 const activityQuery = ref("");
 const toast = ref(null);
 const lastTransaction = ref(null);
@@ -153,14 +164,42 @@ const filteredActivity = computed(() => {
   );
 });
 
-const filteredLabels = computed(() => filterLabels(labels.value, labelQuery.value));
+const filteredLabels = computed(() => sortLabels(filterLabels(labels.value, labelQuery.value, {
+  form: labelForm.value,
+  manufacturer: labelManufacturer.value,
+  size: labelSize.value,
+  inStock: labelInStock.value,
+}), labelSort.value));
+
+const labelGroups = computed(() => groupLabels(filteredLabels.value, labelGroup.value));
+
+const labelManufacturers = computed(() =>
+  [...new Set(labels.value.map((label) => label.manufacturer).filter(Boolean))].sort((left, right) =>
+    left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }),
+  ),
+);
+
+const labelSizes = computed(() => {
+  const contextualLabels = labelForm.value
+    ? labels.value.filter((label) => label.form_code === labelForm.value)
+    : labels.value;
+  const sizes = new Map();
+  for (const label of sortLabels(contextualLabels, "size")) {
+    if (label.size_key && !sizes.has(label.size_key)) sizes.set(label.size_key, label.size_label);
+  }
+  return [...sizes].map(([value, label]) => ({ value, label }));
+});
 
 const assignedFilteredLabels = computed(() =>
   filteredLabels.value.filter((label) => label.has_internal_barcode),
 );
 
 const missingInternalBarcodeCount = computed(
-  () => labels.value.filter((label) => !label.has_internal_barcode).length,
+  () => labels.value.filter((label) => !label.has_internal_barcode && !label.legacy_internal_barcode).length,
+);
+
+const legacyInternalBarcodeCount = computed(
+  () => labels.value.filter((label) => Boolean(label.legacy_internal_barcode)).length,
 );
 
 const allFilteredLabelsSelected = computed(
@@ -169,9 +208,13 @@ const allFilteredLabelsSelected = computed(
     assignedFilteredLabels.value.every((label) => selectedLabelCodes.value.includes(label.label_code)),
 );
 
-const printableLabels = computed(() =>
-  labels.value.filter((label) => selectedLabelCodes.value.includes(label.label_code)),
-);
+const printableLabels = computed(() => groupLabels(
+  sortLabels(
+    labels.value.filter((label) => selectedLabelCodes.value.includes(label.label_code)),
+    labelSort.value,
+  ),
+  labelGroup.value,
+).flatMap((group) => group.labels));
 
 const printableLabelPages = computed(() => {
   const pages = [];
@@ -518,6 +561,55 @@ async function assignInternalBarcodes() {
   }
 }
 
+async function replaceLegacyInternalBarcodes() {
+  if (!form.warehouse || !legacyInternalBarcodeCount.value) return;
+  assigningBarcodes.value = true;
+  const total = legacyInternalBarcodeCount.value;
+  let count = 0;
+  barcodeAssignmentProgress.value = { completed: 0, total };
+  try {
+    while (true) {
+      const result = await call("replace_legacy_internal_barcodes", {
+        warehouse: form.warehouse,
+        limit: 100,
+      });
+      count += result.replaced.length;
+      barcodeAssignmentProgress.value = { completed: total - result.remaining, total };
+      if (!result.remaining) break;
+      if (!result.replaced.length) throw new Error("Barcode replacement made no progress.");
+    }
+    await loadLabels();
+    toast.value = {
+      title: "Inventory barcodes replaced",
+      message: `${count} Items now use ${options.value.internal_barcode_prefix} plus a six-digit number. Manufacturer barcodes were not changed.`,
+    };
+  } catch (error) {
+    await loadLabels();
+    const remaining = legacyInternalBarcodeCount.value;
+    toast.value = {
+      title: count ? "Barcode replacement paused" : "Barcodes not replaced",
+      message: count
+        ? `${count} replaced; ${remaining} remain. Run the replacement again to resume. ${apiError(error)}`
+        : apiError(error),
+    };
+  } finally {
+    assigningBarcodes.value = false;
+    barcodeAssignmentProgress.value = null;
+  }
+}
+
+function changeLabelForm() {
+  labelSize.value = "";
+}
+
+function clearLabelFilters() {
+  labelQuery.value = "";
+  labelForm.value = "";
+  labelManufacturer.value = "";
+  labelSize.value = "";
+  labelInStock.value = false;
+}
+
 function printCommandCard() {
   window.print();
 }
@@ -648,27 +740,47 @@ onMounted(async () => {
           <div class="filter-row labels-filter-row">
             <div class="label-toolbar">
               <div class="page-description"><strong>Inventory labels</strong><span>Reusable Item labels identify rolls, sheets, and cards; quantities use each Item's stock UOM.</span></div>
-              <label class="compact-search label-search"><Search :size="14" /><input v-model="labelQuery" placeholder="Search name, SKU, or unit" aria-label="Search inventory labels" /><button v-if="labelQuery" class="search-clear" type="button" aria-label="Clear label search" @click="labelQuery = ''"><X :size="13" /></button></label>
+              <label class="compact-search label-search"><Search :size="14" /><input v-model="labelQuery" placeholder="Search manufacturer, paper, size, SKU, or barcode" aria-label="Search inventory labels" /><button v-if="labelQuery" class="search-clear" type="button" aria-label="Clear label search" @click="labelQuery = ''"><X :size="13" /></button></label>
               <span class="label-count">{{ filteredLabels.length === labels.length ? `${labels.length} labels` : `${filteredLabels.length} of ${labels.length} labels` }} · {{ form.warehouse }}</span>
             </div>
-            <div class="label-actions"><button v-if="options.permissions?.manage_labels && missingInternalBarcodeCount" class="button subtle" type="button" :disabled="assigningBarcodes" @click="assignInternalBarcodes"><ScanBarcode :size="14" /> {{ assigningBarcodes ? `Assigning ${barcodeAssignmentProgress.completed} of ${barcodeAssignmentProgress.total}…` : `Assign ${missingInternalBarcodeCount} ${missingInternalBarcodeCount === 1 ? 'barcode' : 'barcodes'}` }}</button><button class="button subtle" type="button" :disabled="!assignedFilteredLabels.length" @click="toggleAllLabels">{{ allFilteredLabelsSelected ? 'Clear results' : 'Select results' }}</button><button class="button primary" type="button" :disabled="!selectedLabelCodes.length" @click="printLabels"><Printer :size="14" /> Print selected<span v-if="selectedLabelCodes.length"> ({{ selectedLabelCodes.length }})</span></button></div>
+            <div class="label-actions"><button v-if="options.permissions?.manage_labels && legacyInternalBarcodeCount" class="button subtle" type="button" :disabled="assigningBarcodes" @click="replaceLegacyInternalBarcodes"><ScanBarcode :size="14" /> {{ assigningBarcodes ? `Replacing ${barcodeAssignmentProgress.completed} of ${barcodeAssignmentProgress.total}…` : `Replace ${legacyInternalBarcodeCount} legacy ${legacyInternalBarcodeCount === 1 ? 'barcode' : 'barcodes'} with ${options.internal_barcode_prefix}` }}</button><button v-if="options.permissions?.manage_labels && missingInternalBarcodeCount" class="button subtle" type="button" :disabled="assigningBarcodes" @click="assignInternalBarcodes"><ScanBarcode :size="14" /> {{ assigningBarcodes ? `Assigning ${barcodeAssignmentProgress.completed} of ${barcodeAssignmentProgress.total}…` : `Assign ${missingInternalBarcodeCount} ${missingInternalBarcodeCount === 1 ? 'barcode' : 'barcodes'}` }}</button><button class="button subtle" type="button" :disabled="!assignedFilteredLabels.length" @click="toggleAllLabels">{{ allFilteredLabelsSelected ? 'Clear results' : 'Select results' }}</button><button class="button primary" type="button" :disabled="!selectedLabelCodes.length" @click="printLabels"><Printer :size="14" /> Print selected<span v-if="selectedLabelCodes.length"> ({{ selectedLabelCodes.length }})</span></button></div>
           </div>
-          <div class="label-grid">
-            <article v-for="label in filteredLabels" :key="label.item_code" class="label-card" :class="{ selected: selectedLabelCodes.includes(label.label_code), unassigned: !label.has_internal_barcode }">
-              <input v-model="selectedLabelCodes" class="label-checkbox" type="checkbox" :value="label.label_code" :disabled="!label.has_internal_barcode" :aria-label="`Select ${label.item_name} ${label.tracking} label`" />
-              <strong>{{ label.item_name }}</strong><span>{{ label.item_code }}</span>
-              <div class="barcode-wrap"><BarcodeSvg v-if="label.has_internal_barcode" :value="label.label_code" /><div v-else class="barcode-placeholder">Assign an internal barcode</div></div>
-              <code>{{ label.has_internal_barcode ? label.label_code : 'Not assigned' }}</code><em>Reusable Item label · {{ formatNumber(label.remaining) }} {{ formatUnit(label.stock_uom, label.remaining) }} on hand</em>
-            </article>
+          <div class="catalog-controls">
+            <label><span>Type</span><select v-model="labelForm" @change="changeLabelForm"><option value="">All types</option><option value="R">Rolls</option><option value="S">Sheets</option><option value="C">Cards</option></select></label>
+            <label><span>Manufacturer</span><select v-model="labelManufacturer"><option value="">All manufacturers</option><option v-for="manufacturer in labelManufacturers" :key="manufacturer" :value="manufacturer">{{ manufacturer }}</option></select></label>
+            <label><span>Size</span><select v-model="labelSize"><option value="">All sizes</option><option v-for="size in labelSizes" :key="size.value" :value="size.value">{{ size.label }}</option></select></label>
+            <label><span>Sort</span><select v-model="labelSort"><option value="size">Numeric size</option><option value="manufacturer">Manufacturer</option><option value="name">Paper line</option><option value="barcode">Barcode</option></select></label>
+            <label><span>Group</span><select v-model="labelGroup"><option value="form">Roll / Sheet / Card</option><option value="manufacturer">Manufacturer</option><option value="none">No groups</option></select></label>
+            <label class="catalog-checkbox"><input v-model="labelInStock" type="checkbox" /><span>On hand only</span></label>
+            <button class="button subtle" type="button" @click="clearLabelFilters"><X :size="14" /> Clear filters</button>
+          </div>
+          <div class="label-group-list">
+            <section v-for="group in labelGroups" :key="group.key" class="label-group">
+              <header class="label-group-heading"><strong>{{ group.label }}</strong><span>{{ group.labels.length }} {{ group.labels.length === 1 ? 'label' : 'labels' }}</span></header>
+              <div class="label-grid">
+                <article v-for="label in group.labels" :key="label.item_code" class="label-card" :class="{ selected: selectedLabelCodes.includes(label.label_code), unassigned: !label.has_internal_barcode }">
+                  <input v-model="selectedLabelCodes" class="label-checkbox" type="checkbox" :value="label.label_code" :disabled="!label.has_internal_barcode" :aria-label="`Select ${label.manufacturer} ${label.paper_line} label`" />
+                  <strong class="label-manufacturer">{{ label.manufacturer }}</strong>
+                  <strong class="label-paper-line">{{ label.paper_line }}</strong>
+                  <span class="label-form-size">{{ label.form_size }}</span>
+                  <div class="barcode-wrap"><BarcodeSvg v-if="label.has_internal_barcode" :value="label.label_code" /><div v-else class="barcode-placeholder">{{ label.legacy_internal_barcode ? `Replace ${label.legacy_internal_barcode}` : 'Assign an internal barcode' }}</div></div>
+                  <code>{{ label.has_internal_barcode ? label.label_code : label.legacy_internal_barcode || 'Not assigned' }}</code>
+                  <em class="label-sku">{{ label.item_code }}</em>
+                  <small class="label-stock">{{ formatNumber(label.remaining) }} {{ formatUnit(label.stock_uom, label.remaining) }} on hand</small>
+                </article>
+              </div>
+            </section>
             <div v-if="!labels.length" class="empty-list">No roll, sheet, or card Items were found for this Warehouse.</div>
-            <div v-else-if="!filteredLabels.length" class="empty-list">No labels match “{{ labelQuery }}”.</div>
+            <div v-else-if="!filteredLabels.length" class="empty-list">No labels match the current filters.</div>
           </div>
           <div class="print-label-pages" aria-hidden="true">
             <section v-for="(page, pageIndex) in printableLabelPages" :key="`print-page-${pageIndex}`" class="print-label-page">
               <article v-for="label in page" :key="`print-${label.item_code}`" class="label-card print-label-card">
-                <strong>{{ label.item_name }}</strong><span>{{ label.item_code }}</span>
+                <strong class="label-manufacturer">{{ label.manufacturer }}</strong>
+                <strong class="label-paper-line">{{ label.paper_line }}</strong>
+                <span class="label-form-size">{{ label.form_size }}</span>
                 <div class="barcode-wrap"><BarcodeSvg :value="label.label_code" /></div>
-                <code>{{ label.label_code }}</code><em>Reusable Item label</em>
+                <code>{{ label.label_code }}</code><em class="label-sku">{{ label.item_code }}</em>
               </article>
             </section>
           </div>

@@ -1043,15 +1043,83 @@ select:disabled {
   font-size: 11px;
 }
 
-.label-grid {
-  display: grid;
+.catalog-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid #f0f0f0;
+  background: var(--surface-gray-1);
+}
+
+.catalog-controls > label:not(.catalog-checkbox) {
+  display: flex;
+  min-width: 135px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.catalog-controls label > span {
+  color: var(--ink-gray-5);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.catalog-controls select {
+  height: 31px;
+  padding: 0 28px 0 9px;
+  border: 1px solid var(--outline-gray);
+  border-radius: 6px;
+  color: var(--ink-gray-8);
+  background: #fff;
+  font-size: 11px;
+}
+
+.catalog-checkbox {
+  display: flex;
+  height: 31px;
+  align-items: center;
+  gap: 6px;
+}
+
+.catalog-checkbox input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--surface-gray-10);
+}
+
+.label-group-list {
   min-height: 0;
   flex: 1;
+  padding: 8px 0 24px;
+  overflow-y: auto;
+}
+
+.label-group-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 13px 20px 0;
+}
+
+.label-group-heading strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.label-group-heading span {
+  color: var(--ink-gray-5);
+  font-size: 10px;
+}
+
+.label-grid {
+  display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   align-content: start;
   gap: 16px;
-  padding: 20px;
-  overflow-y: auto;
+  padding: 12px 20px 8px;
 }
 
 .print-label-pages {
@@ -1072,7 +1140,7 @@ select:disabled {
 .label-card {
   position: relative;
   display: flex;
-  min-height: 220px;
+  min-height: 250px;
   align-items: center;
   flex-direction: column;
   padding: 22px 18px 16px;
@@ -1103,8 +1171,26 @@ select:disabled {
 .label-card > strong {
   max-width: 100%;
   padding-inline: 22px;
-  font-size: 13px;
   font-weight: 600;
+}
+
+.label-manufacturer {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.label-paper-line {
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.label-card > .label-form-size {
+  margin-top: 6px;
+  color: var(--ink-gray-8);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 .label-card > span,
@@ -1118,6 +1204,20 @@ select:disabled {
   margin: 2px 0 5px;
   font-size: 13px;
   letter-spacing: 0.08em;
+}
+
+.label-card > .label-sku {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--ink-gray-7);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 9px;
+}
+
+.label-stock {
+  margin-top: 5px;
+  color: var(--ink-gray-5);
+  font-size: 10px;
 }
 
 .label-check {
@@ -1139,7 +1239,7 @@ select:disabled {
   min-height: 72px;
   align-items: center;
   justify-content: center;
-  margin-top: 15px;
+  margin-top: 10px;
   overflow: hidden;
 }
 
@@ -1709,6 +1809,24 @@ select:disabled {
     width: 100%;
   }
 
+  .catalog-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 10px 12px;
+  }
+
+  .catalog-controls > label:not(.catalog-checkbox) {
+    min-width: 0;
+  }
+
+  .catalog-controls .button {
+    align-self: end;
+  }
+
+  .label-group-heading {
+    padding-inline: 12px;
+  }
+
   .activity-list {
     padding: 0 12px 40px;
   }
@@ -1807,6 +1925,8 @@ select:disabled {
   .sidebar,
   .topbar,
   .filter-row,
+  .catalog-controls,
+  .label-group-list,
   .toast {
     display: none !important;
   }
@@ -1819,10 +1939,6 @@ select:disabled {
     width: auto;
     height: auto;
     overflow: visible;
-  }
-
-  .label-grid {
-    display: none;
   }
 
   .print-label-pages {
@@ -1863,6 +1979,21 @@ select:disabled {
     white-space: nowrap;
   }
 
+  .print-label-card > .label-manufacturer {
+    font-size: 10pt;
+  }
+
+  .print-label-card > .label-paper-line {
+    margin-top: 0.01in;
+    font-size: 9pt;
+  }
+
+  .print-label-card > .label-form-size {
+    margin-top: 0.02in;
+    color: #111;
+    font-size: 8pt;
+  }
+
   .print-label-card > span,
   .print-label-card > em {
     font-size: 7.5pt;
@@ -1873,10 +2004,18 @@ select:disabled {
     font-size: 9pt;
   }
 
+  .print-label-card > .label-sku {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 6.5pt;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .print-label-card .barcode-wrap {
     min-height: 0;
     height: 0.64in;
-    margin-top: 0.08in;
+    margin-top: 0.04in;
   }
 
   .print-label-card .barcode-wrap svg {

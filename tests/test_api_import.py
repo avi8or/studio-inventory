@@ -20,7 +20,21 @@ class ApiImportTests(unittest.TestCase):
 		frappe_model = types.ModuleType("frappe.model")
 		frappe_model.__path__ = []
 		frappe_naming = types.ModuleType("frappe.model.naming")
-		frappe_naming.make_autoname = lambda series: "INV000043" if series == "INV.######" else "SIB.000001"
+
+		class NamingSeries:
+			values = {}
+
+			def __init__(self, series):
+				self.series = series
+
+			def get_current_value(self):
+				return self.values.get(self.series, 0)
+
+			def update_counter(self, value):
+				self.values[self.series] = value
+
+		frappe_naming.NamingSeries = NamingSeries
+		frappe_naming.make_autoname = lambda series: "LP000043" if series == "LP.######" else "SIB.000001"
 		frappe_utils = types.ModuleType("frappe.utils")
 		frappe_utils.cint = lambda value: int(value)
 		frappe_utils.flt = float
@@ -40,6 +54,8 @@ class ApiImportTests(unittest.TestCase):
 
 		with patch.dict(sys.modules, modules):
 			spec.loader.exec_module(module)
+
+		frappe.get_cached_doc = lambda doctype: types.SimpleNamespace(internal_barcode_prefix="LP")
 
 		warehouses = [
 			types.SimpleNamespace(name="Finished Goods - LPS", warehouse_name="Finished Goods", company="Lightpress"),
@@ -71,42 +87,71 @@ class ApiImportTests(unittest.TestCase):
 			name="P-HAHN-TORCHON-285-R-24",
 			item_name="Hahnemühle — Torchon — 285 GSM — 24 in roll",
 			stock_uom="Foot",
+			brand="Hahnemühle",
+			variant_of="P-HAHN-TORCHON-285",
 		)
 		sheet = types.SimpleNamespace(
 			name="P-HAHN-TORCHON-285-S-13X19",
 			item_name="Hahnemühle — Torchon — 285 GSM — 13 × 19 in",
 			stock_uom="Sheet",
+			brand="Hahnemühle",
+			variant_of="P-HAHN-TORCHON-285",
 		)
 		card = types.SimpleNamespace(
 			name="P-HAHN-BAMBOO-290-C-5X7",
 			item_name="Hahnemühle — Bamboo — 290 GSM — 5 × 7 in cards",
 			stock_uom="Card Set",
+			brand="Hahnemühle",
+			variant_of="P-HAHN-BAMBOO-290",
+		)
+		torchon_template = types.SimpleNamespace(
+			name="P-HAHN-TORCHON-285",
+			item_name="Hahnemühle — Torchon — 285 GSM",
+			brand="Hahnemühle",
 		)
 		queried_doctypes = []
 
 		def get_all_list(doctype, **kwargs):
 			queried_doctypes.append(doctype)
-			self.assertEqual(kwargs["filters"]["item_group"], "Paper")
-			return [roll, sheet]
+			if kwargs["filters"].get("item_group") == "Paper":
+				return [roll, sheet]
+			self.assertEqual(kwargs["filters"]["name"], ("in", ["P-HAHN-TORCHON-285"]))
+			return [torchon_template]
 
 		module._warehouse_company = lambda warehouse: "Lightpress"
 		module._get_all_list = get_all_list
 		module._balance = lambda *_args, **_kwargs: 39.37
-		frappe.get_all = lambda doctype, **_kwargs: [
-			types.SimpleNamespace(parent=roll.name, barcode="P-HAHN-TORCHON-285-R-24", idx=1),
-			types.SimpleNamespace(parent=roll.name, barcode="INV000042", idx=2),
-		] if doctype == "Item Barcode" else []
+		def get_all(doctype, **_kwargs):
+			if doctype == "Item Barcode":
+				return [
+					types.SimpleNamespace(parent=roll.name, barcode="P-HAHN-TORCHON-285-R-24", idx=1),
+					types.SimpleNamespace(parent=roll.name, barcode="LP000042", idx=2),
+					types.SimpleNamespace(parent=sheet.name, barcode="INV000043", idx=1),
+				]
+			if doctype == "Item Variant Attribute":
+				return [
+					types.SimpleNamespace(parent=roll.name, attribute="Roll Width", attribute_value="24 in", idx=1),
+					types.SimpleNamespace(parent=sheet.name, attribute="Sheet Size", attribute_value="13 × 19 in", idx=1),
+				]
+			return []
+
+		frappe.get_all = get_all
 
 		labels = module.get_inventory_labels("Stores - LPS")
 		roll_item_label = next(label for label in labels if label["item_code"] == roll.name)
 		sheet_item_label = next(label for label in labels if label["item_code"] == sheet.name)
-		self.assertEqual(queried_doctypes, ["Item"])
+		self.assertEqual(queried_doctypes, ["Item", "Item"])
 		self.assertEqual(len(labels), 2)
 		self.assertEqual(roll_item_label["tracking"], "Item")
-		self.assertEqual(roll_item_label["label_code"], "INV000042")
+		self.assertEqual(roll_item_label["label_code"], "LP000042")
 		self.assertTrue(roll_item_label["has_internal_barcode"])
-		self.assertEqual(sheet_item_label["label_code"], sheet.name)
+		self.assertEqual(roll_item_label["manufacturer"], "Hahnemühle")
+		self.assertEqual(roll_item_label["paper_line"], "Torchon — 285 GSM")
+		self.assertEqual(roll_item_label["form_size"], 'ROLL - 24"')
+		self.assertEqual(sheet_item_label["label_code"], "INV000043")
 		self.assertFalse(sheet_item_label["has_internal_barcode"])
+		self.assertEqual(sheet_item_label["legacy_internal_barcode"], "INV000043")
+		self.assertEqual(sheet_item_label["form_size"], 'SHEET - 13 × 19"')
 
 		class ItemDoc:
 			def __init__(self, name):
@@ -126,19 +171,39 @@ class ApiImportTests(unittest.TestCase):
 
 		sheet_doc = ItemDoc(sheet.name)
 		module._inventory_label_items = lambda: [roll, sheet, card]
-		module._internal_barcodes_by_item = lambda _names: {roll.name: "INV000042"}
-		module._next_internal_barcode = lambda: "INV000043"
+		module._internal_barcodes_by_item = lambda _names: {roll.name: "LP000042"}
+		module._next_internal_barcode = lambda: "LP000043"
 		frappe.get_doc = lambda doctype, name: sheet_doc if (doctype, name) == ("Item", sheet.name) else None
 
 		assignment = module.assign_missing_internal_barcodes("Stores - LPS", limit=1)
-		self.assertEqual(assignment["created"], [{"item_code": sheet.name, "barcode": "INV000043"}])
+		self.assertEqual(assignment["created"], [{"item_code": sheet.name, "barcode": "LP000043"}])
 		self.assertEqual(assignment["assigned"], 2)
 		self.assertEqual(assignment["remaining"], 1)
 		self.assertEqual(assignment["total"], 3)
 		self.assertEqual(sheet_doc.checked_permission, "write")
 		self.assertEqual(sheet_doc.appended_fieldname, "barcodes")
-		self.assertEqual(sheet_doc.barcodes[0].barcode, "INV000043")
+		self.assertEqual(sheet_doc.barcodes[0].barcode, "LP000043")
 		self.assertTrue(sheet_doc.saved)
+
+		legacy_doc = ItemDoc(roll.name)
+		legacy_doc.barcodes = [
+			types.SimpleNamespace(barcode="012345678905"),
+			types.SimpleNamespace(barcode="INV000042"),
+		]
+		legacy_doc.remove = lambda row: legacy_doc.barcodes.remove(row)
+		module._inventory_label_items = lambda: [roll]
+		module._inventory_barcode_maps = lambda _names: ({}, {roll.name: "INV000042"})
+		frappe.db = types.SimpleNamespace(get_value=lambda *_args, **_kwargs: None)
+		frappe.get_doc = lambda doctype, name: legacy_doc if (doctype, name) == ("Item", roll.name) else None
+
+		replacement = module.replace_legacy_internal_barcodes("Stores - LPS")
+		self.assertEqual(
+			replacement["replaced"],
+			[{"item_code": roll.name, "from": "INV000042", "barcode": "LP000042"}],
+		)
+		self.assertEqual(replacement["remaining"], 0)
+		self.assertEqual([row.barcode for row in legacy_doc.barcodes], ["012345678905", "LP000042"])
+		self.assertEqual(NamingSeries.values["LP.######"], 42)
 
 
 if __name__ == "__main__":
