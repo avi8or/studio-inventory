@@ -1491,8 +1491,8 @@ select:disabled {
 
 @media (max-width: 900px), (any-pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]),
-  select,
-  textarea {
+  select:not(:disabled),
+  textarea:not(:disabled) {
     font-size: 16px;
   }
 }

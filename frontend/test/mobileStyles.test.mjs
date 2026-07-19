@@ -7,6 +7,6 @@ const stylesheet = await readFile(new URL("../src/index.css", import.meta.url), 
 test("mobile and touch form controls avoid Safari focus zoom", () => {
   assert.match(
     stylesheet,
-    /@media \(max-width: 900px\), \(any-pointer: coarse\) \{[\s\S]*?input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\),[\s\S]*?select,[\s\S]*?textarea \{[\s\S]*?font-size: 16px;/,
+    /@media \(max-width: 900px\), \(any-pointer: coarse\) \{[\s\S]*?input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\),[\s\S]*?select:not\(:disabled\),[\s\S]*?textarea:not\(:disabled\) \{[\s\S]*?font-size: 16px;/,
   );
 });
