@@ -199,7 +199,7 @@ def _paper_options() -> list[dict[str, Any]]:
 		},
 		fields=["name", "item_name", "stock_uom", "brand"],
 		order_by="item_name asc",
-		limit_page_length=1000,
+		limit_page_length=0,
 	)
 
 
