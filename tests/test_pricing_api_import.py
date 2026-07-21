@@ -2,6 +2,7 @@ import importlib.util
 import sys
 import types
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -89,6 +90,35 @@ class PricingApiAccessTests(unittest.TestCase):
 		standalone_context = module.get_pricing_context(include_paper_items=True)
 		self.assertEqual(standalone_context["paper_items"], [{"name": "PAPER-001"}])
 		self.assertEqual(paper_calls, [True])
+
+	def test_cost_basis_serializes_last_verified_date(self):
+		module, frappe = self.load_module()
+
+		class Row(dict):
+			__getattr__ = dict.__getitem__
+
+		frappe.db = types.SimpleNamespace(has_column=lambda *_args: True)
+		frappe.get_list = lambda *_args, **_kwargs: [
+			Row(
+				name="PRICE-001",
+				price_list="Standard Buying",
+				price_list_rate=211.05,
+				uom="Foot",
+				supplier="Red River",
+				valid_from=None,
+				valid_upto=None,
+				note=None,
+				si_merchant_url=None,
+				si_last_verified_on=date(2026, 7, 20),
+			)
+		]
+		module._item_dimensions = lambda _item: module.PaperDimensions(stock_uom="Foot", width_in=24)
+		item = types.SimpleNamespace(name="PAPER-001", stock_uom="Foot", uoms=[])
+		settings = types.SimpleNamespace(paper_cost_price_list="Standard Buying")
+
+		basis = module._cost_basis(item, settings)
+
+		self.assertEqual(basis["last_verified_on"], "2026-07-20")
 
 
 if __name__ == "__main__":

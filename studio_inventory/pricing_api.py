@@ -173,7 +173,9 @@ def _cost_basis(item, settings=None) -> dict[str, Any] | None:
 		"conversion_factor": conversion,
 		"supplier": row.supplier,
 		"merchant_url": row.get("si_merchant_url"),
-		"last_verified_on": row.get("si_last_verified_on"),
+		"last_verified_on": (
+			str(row.get("si_last_verified_on")) if row.get("si_last_verified_on") else None
+		),
 		"note": row.note,
 	}
 
