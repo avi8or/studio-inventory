@@ -103,6 +103,7 @@ const labelGroup = ref("form");
 const activityQuery = ref("");
 const toast = ref(null);
 const lastTransaction = ref(null);
+const inventoryOptionsLoaded = ref(false);
 
 const form = reactive({
   warehouse: "",
@@ -285,8 +286,10 @@ async function focusScanner() {
   scanInput.value?.focus();
 }
 
-async function loadOptions() {
-  options.value = await call("get_options");
+async function loadOptions({ priceOnly = false } = {}) {
+  options.value = await call("get_options", { price_only: priceOnly ? 1 : 0 });
+  if (priceOnly) return;
+  inventoryOptionsLoaded.value = true;
   form.warehouse = options.value.default_warehouse || options.value.warehouses?.[0]?.name || "";
   form.supplier = options.value.default_supplier || "";
   if (!options.value.permissions?.receive) {
@@ -330,6 +333,9 @@ function updateModeUrl(view) {
 }
 
 async function navigate(view) {
+  if (view !== "price" && inventoryAllowed.value && !inventoryOptionsLoaded.value) {
+    await loadOptions();
+  }
   activeView.value = view;
   updateModeUrl(view);
   selected.value = null;
@@ -667,13 +673,14 @@ function toggleAllLabels() {
 onMounted(async () => {
   try {
     const requestedMode = studioModeFromUrl(window.location.href, window.location.origin);
-    const permissions = await call("get_app_permissions");
-    options.value.permissions = permissions;
+    await loadOptions({ priceOnly: requestedMode === "price" });
+    const permissions = options.value.permissions;
     if ((requestedMode === "price" && permissions.price) || (!inventoryAllowed.value && permissions.price)) {
       activeView.value = "price";
       return;
     }
-    await Promise.all([loadOptions(), loadActivity()]);
+    if (!inventoryOptionsLoaded.value) await loadOptions();
+    await loadActivity();
     if (requestedMode && options.value.permissions?.[requestedMode]) await navigate(requestedMode);
     await focusScanner();
   } catch (error) {

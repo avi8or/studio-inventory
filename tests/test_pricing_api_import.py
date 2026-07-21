@@ -19,6 +19,7 @@ class PricingApiAccessTests(unittest.TestCase):
 		frappe.has_permission = lambda *_args, **_kwargs: False
 
 		frappe_utils = types.ModuleType("frappe.utils")
+		frappe_utils.cint = lambda value: int(value)
 		frappe_utils.flt = float
 		frappe_utils.get_url_to_list = lambda doctype: f"/app/{doctype.lower()}"
 		frappe_utils.getdate = lambda value: value
@@ -65,6 +66,29 @@ class PricingApiAccessTests(unittest.TestCase):
 		self.assertEqual(captured["doctype"], "Item")
 		self.assertEqual(captured["filters"]["stock_uom"], ["in", ["Sheet", "Foot"]])
 		self.assertEqual(captured["limit_page_length"], 1000)
+
+	def test_only_standalone_context_queries_paper_items(self):
+		module, frappe = self.load_module()
+		settings = types.SimpleNamespace(default_print_item="PRINT-SERVICE")
+		rules = types.SimpleNamespace(ink_cost_per_sq_in=0.001, low_margin_threshold_pct=50)
+		paper_calls = []
+
+		module._check_pricing_permission = lambda: None
+		module._pricing_settings = lambda: settings
+		module._rules = lambda _settings: rules
+		module._company = lambda _settings: "Lightpress"
+		module._paper_cost_price_list = lambda _settings: "Standard Buying"
+		module._can_override_cost = lambda: False
+		module._paper_options = lambda: paper_calls.append(True) or [{"name": "PAPER-001"}]
+		frappe.db = types.SimpleNamespace(get_value=lambda *_args: "USD")
+
+		quotation_context = module.get_pricing_context()
+		self.assertNotIn("paper_items", quotation_context)
+		self.assertEqual(paper_calls, [])
+
+		standalone_context = module.get_pricing_context(include_paper_items=True)
+		self.assertEqual(standalone_context["paper_items"], [{"name": "PAPER-001"}])
+		self.assertEqual(paper_calls, [True])
 
 
 if __name__ == "__main__":

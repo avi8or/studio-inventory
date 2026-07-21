@@ -57,7 +57,7 @@ async function loadContext() {
   loading.value = true;
   error.value = "";
   try {
-    context.value = await callPricing("get_pricing_context");
+    context.value = await callPricing("get_pricing_context", { include_paper_items: 1 });
     form.print_item = context.value.default_print_item || "";
     form.ink_cost_per_sq_in = context.value.ink_cost_per_sq_in;
   } catch (value) {
