@@ -10,6 +10,7 @@ from frappe import _
 from frappe.utils import flt, get_url_to_list, getdate, nowdate
 
 from studio_inventory.domain import DomainError
+from studio_inventory.permissions import has_pricing_access
 from studio_inventory.pricing import (
 	FORMULA_VERSION,
 	PaperDimensions,
@@ -181,10 +182,25 @@ def _can_override_cost() -> bool:
 	return bool(PRICING_MANAGER_ROLES.intersection(frappe.get_roles()))
 
 
-def _check_quotation_permission() -> None:
-	if frappe.has_permission("Quotation", ptype="create") or frappe.has_permission("Quotation", ptype="write"):
+def _check_pricing_permission() -> None:
+	if has_pricing_access():
 		return
-	frappe.throw(_("You do not have permission to create or edit Quotations."), frappe.PermissionError)
+	frappe.throw(_("You do not have permission to use print pricing."), frappe.PermissionError)
+
+
+def _paper_options() -> list[dict[str, Any]]:
+	return frappe.get_list(
+		"Item",
+		filters={
+			"disabled": 0,
+			"is_stock_item": 1,
+			"has_variants": 0,
+			"stock_uom": ["in", list(PAPER_ATTRIBUTE_BY_UOM)],
+		},
+		fields=["name", "item_name", "stock_uom", "brand"],
+		order_by="item_name asc",
+		limit_page_length=1000,
+	)
 
 
 def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, Any]:
@@ -294,22 +310,25 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 
 @frappe.whitelist(methods=["POST"])
 def get_pricing_context() -> dict:
-	_check_quotation_permission()
+	_check_pricing_permission()
 	settings = _pricing_settings()
 	rules = _rules(settings)
+	company = _company(settings)
 	return {
-		"company": _company(settings),
+		"company": company,
+		"currency": frappe.db.get_value("Company", company, "default_currency") if company else None,
 		"default_print_item": settings.default_print_item,
 		"paper_cost_price_list": _paper_cost_price_list(settings),
 		"ink_cost_per_sq_in": rules.ink_cost_per_sq_in,
 		"low_margin_threshold_pct": rules.low_margin_threshold_pct,
 		"can_override_cost": _can_override_cost(),
+		"paper_items": _paper_options(),
 	}
 
 
 @frappe.whitelist(methods=["POST"])
 def get_paper_cost(item_code: str) -> dict:
-	_check_quotation_permission()
+	_check_pricing_permission()
 	item = _paper_item(item_code)
 	try:
 		dimensions = _item_dimensions(item)
@@ -328,7 +347,7 @@ def get_paper_cost(item_code: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def calculate_print(payload: dict | str) -> dict:
-	_check_quotation_permission()
+	_check_pricing_permission()
 	try:
 		return _calculation_payload(_payload(payload))
 	except DomainError as error:

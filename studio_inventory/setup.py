@@ -301,27 +301,7 @@ def _enable_crm_deal_quotations() -> None:
 def _create_crm_form_script() -> None:
 	if not frappe.db.exists("DocType", "CRM Form Script"):
 		return
-	script = """class CRMDeal {
-	onLoad() {
-		if (this.doc.__newDocument) return
-		this.actions = this.actions || []
-		if (this.actions.some((action) => action.label === __(\"Create Print Quotation\"))) return
-		this.actions.push({
-			label: __(\"Create Print Quotation\"),
-			icon: \"file-text\",
-			onClick: () => {
-				call(\"studio_inventory.pricing_api.get_quotation_url\", {
-					crm_deal: this.doc.name,
-				}).then((url) => {
-					if (url) window.open(url, \"_blank\")
-				}).catch((error) => {
-					toast.error(error.messages?.[0] || __(\"Could not create the quotation.\"))
-				})
-			},
-		})
-	}
-}
-"""
+	script = _crm_deal_form_script()
 	if frappe.db.exists("CRM Form Script", CRM_FORM_SCRIPT_NAME):
 		frappe.db.set_value(
 			"CRM Form Script",
@@ -341,3 +321,34 @@ def _create_crm_form_script() -> None:
 			"is_standard": 1,
 		}
 	).insert(ignore_permissions=True)
+
+
+def _crm_deal_form_script() -> str:
+	return """class CRMDeal {
+	onLoad() {
+		this.actions = this.actions || []
+		if (!this.actions.some((action) => action.label === __(\"Price Calculator\"))) {
+			this.actions.push({
+				label: __(\"Price Calculator\"),
+				icon: \"calculator\",
+				onClick: () => window.open(\"/studio-inventory?mode=price\", \"_blank\"),
+			})
+		}
+		if (this.doc.__newDocument) return
+		if (this.actions.some((action) => action.label === __(\"Create Print Quotation\"))) return
+		this.actions.push({
+			label: __(\"Create Print Quotation\"),
+			icon: \"file-text\",
+			onClick: () => {
+				call(\"studio_inventory.pricing_api.get_quotation_url\", {
+					crm_deal: this.doc.name,
+				}).then((url) => {
+					if (url) window.open(url, \"_blank\")
+				}).catch((error) => {
+					toast.error(error.messages?.[0] || __(\"Could not create the quotation.\"))
+				})
+			},
+		})
+	}
+}
+"""
