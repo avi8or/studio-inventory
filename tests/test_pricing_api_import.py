@@ -53,7 +53,7 @@ class PricingApiAccessTests(unittest.TestCase):
 		frappe.get_roles = lambda: ["Sales Manager"]
 		self.assertFalse(module.has_pricing_access())
 
-	def test_standalone_context_lists_only_supported_paper_items(self):
+	def test_standalone_context_lists_all_supported_paper_items(self):
 		module, frappe = self.load_module()
 		captured = {}
 
@@ -65,7 +65,7 @@ class PricingApiAccessTests(unittest.TestCase):
 		self.assertEqual(module._paper_options(), [])
 		self.assertEqual(captured["doctype"], "Item")
 		self.assertEqual(captured["filters"]["stock_uom"], ["in", ["Sheet", "Foot"]])
-		self.assertEqual(captured["limit_page_length"], 1000)
+		self.assertEqual(captured["limit_page_length"], 0)
 
 	def test_only_standalone_context_queries_paper_items(self):
 		module, frappe = self.load_module()
