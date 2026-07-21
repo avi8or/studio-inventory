@@ -1,5 +1,6 @@
 const INVENTORY_PATH = "/studio-inventory";
 const INVENTORY_MODES = new Set(["receive", "consume", "count"]);
+const STUDIO_MODES = new Set([...INVENTORY_MODES, "price"]);
 
 const MODE_COMMANDS = {
   R: "receive",
@@ -52,6 +53,11 @@ export function inventoryUrl(origin, mode = null) {
 }
 
 export function inventoryModeFromUrl(value, origin) {
+  const mode = studioModeFromUrl(value, origin);
+  return INVENTORY_MODES.has(mode) ? mode : null;
+}
+
+export function studioModeFromUrl(value, origin) {
   let url;
   try {
     url = new URL(value, origin);
@@ -60,7 +66,7 @@ export function inventoryModeFromUrl(value, origin) {
   }
   if (url.origin !== new URL(origin).origin || normalizedPath(url.pathname) !== INVENTORY_PATH) return null;
   const mode = String(url.searchParams.get("mode") || "").trim().toLowerCase();
-  return INVENTORY_MODES.has(mode) ? mode : null;
+  return STUDIO_MODES.has(mode) ? mode : null;
 }
 
 export function parseScannerCommand(value, origin) {

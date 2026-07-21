@@ -14,6 +14,8 @@ class ApiImportTests(unittest.TestCase):
 		frappe._ = lambda value: value
 		frappe.whitelist = lambda **_kwargs: lambda function: function
 		frappe.has_permission = lambda *_args, **_kwargs: True
+		frappe.get_roles = lambda: []
+		frappe.session = types.SimpleNamespace(user="inventory@example.com")
 		frappe.ValidationError = type("ValidationError", (Exception,), {})
 		frappe.DoesNotExistError = type("DoesNotExistError", (Exception,), {})
 		frappe.PermissionError = type("PermissionError", (Exception,), {})
@@ -56,6 +58,17 @@ class ApiImportTests(unittest.TestCase):
 
 		with patch.dict(sys.modules, modules):
 			spec.loader.exec_module(module)
+
+		self.assertEqual(
+			module.get_app_permissions(),
+			{
+				"price": True,
+				"receive": True,
+				"consume": True,
+				"count": True,
+				"manage_labels": True,
+			},
+		)
 
 		frappe.get_cached_doc = lambda doctype: types.SimpleNamespace(internal_barcode_prefix="LP")
 

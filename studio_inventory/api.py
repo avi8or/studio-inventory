@@ -16,6 +16,7 @@ from studio_inventory.domain import (
 	physical_units_for_uom,
 	plan_receipt,
 )
+from studio_inventory.permissions import has_pricing_access
 from studio_inventory.pricing import parse_paper_dimensions
 
 APP_MARKER = "[Studio Inventory]"
@@ -259,6 +260,20 @@ def _select_default_warehouse(warehouses, default_company: str | None, user_defa
 
 
 @frappe.whitelist(methods=["POST"])
+def get_app_permissions() -> dict[str, bool]:
+	return {
+		"price": has_pricing_access(),
+		"receive": frappe.has_permission("Purchase Receipt", ptype="create")
+		and frappe.has_permission("Purchase Receipt", ptype="submit"),
+		"consume": frappe.has_permission("Stock Entry", ptype="create")
+		and frappe.has_permission("Stock Entry", ptype="submit"),
+		"count": frappe.has_permission("Stock Reconciliation", ptype="create")
+		and frappe.has_permission("Stock Reconciliation", ptype="submit"),
+		"manage_labels": frappe.has_permission("Item", ptype="write"),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
 def get_options() -> dict:
 	warehouses = frappe.get_list(
 		"Warehouse",
@@ -288,15 +303,7 @@ def get_options() -> dict:
 		"default_company": default_company,
 		"default_warehouse": default_warehouse,
 		"default_supplier": frappe.defaults.get_user_default("Supplier"),
-		"permissions": {
-			"receive": frappe.has_permission("Purchase Receipt", ptype="create")
-			and frappe.has_permission("Purchase Receipt", ptype="submit"),
-			"consume": frappe.has_permission("Stock Entry", ptype="create")
-			and frappe.has_permission("Stock Entry", ptype="submit"),
-			"count": frappe.has_permission("Stock Reconciliation", ptype="create")
-			and frappe.has_permission("Stock Reconciliation", ptype="submit"),
-			"manage_labels": frappe.has_permission("Item", ptype="write"),
-		},
+		"permissions": get_app_permissions(),
 	}
 
 

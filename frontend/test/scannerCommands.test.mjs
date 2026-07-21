@@ -7,6 +7,7 @@ import {
   inventoryModeFromUrl,
   inventoryUrl,
   parseScannerCommand,
+  studioModeFromUrl,
 } from "../src/scannerCommands.js";
 
 const ORIGIN = "https://erp.example.com";
@@ -19,6 +20,8 @@ test("builds stable app and mode URLs", () => {
 
 test("reads only same-site Studio Inventory deep links", () => {
   assert.equal(inventoryModeFromUrl(`${ORIGIN}/studio-inventory/?mode=count`, ORIGIN), "count");
+  assert.equal(studioModeFromUrl(`${ORIGIN}/studio-inventory?mode=price`, ORIGIN), "price");
+  assert.equal(inventoryModeFromUrl(`${ORIGIN}/studio-inventory?mode=price`, ORIGIN), null);
   assert.equal(inventoryModeFromUrl(`${ORIGIN}/studio-inventory?mode=unknown`, ORIGIN), null);
   assert.equal(inventoryModeFromUrl("https://example.com/studio-inventory?mode=count", ORIGIN), null);
 });

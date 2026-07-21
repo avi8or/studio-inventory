@@ -70,6 +70,15 @@ class SetupImportTests(unittest.TestCase):
 		self.assertEqual(updates, [])
 		self.assertEqual(clear_cache_calls, [])
 
+	def test_crm_action_opens_save_nothing_price_calculator(self):
+		module, _updates, _clear_cache_calls = self.load_setup()
+
+		script = module._crm_deal_form_script()
+
+		self.assertIn('label: __("Price Calculator")', script)
+		self.assertIn('window.open("/studio-inventory?mode=price", "_blank")', script)
+		self.assertIn('label: __("Create Print Quotation")', script)
+
 
 if __name__ == "__main__":
 	unittest.main()

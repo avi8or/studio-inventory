@@ -20,6 +20,13 @@ HID keyboard device; no browser extension or vendor SDK is required.
 
 ## Print pricing and quotations
 
+Open **Price calculator** from Studio Inventory, or choose **Price Calculator**
+on a Frappe CRM Deal, to calculate a temporary price without creating or
+changing a Deal, Quotation, or inventory record. The CRM action opens the
+calculator in a separate window at `/studio-inventory?mode=price`. It uses the
+same server-side paper costs, pricing settings, margin warning, and consumption
+estimate as calculated Quotation rows.
+
 The calculator extends the native ERPNext Quotation form. Choose **Add > Add
 Calculated Print**, then select a sellable print Item, a Paper Item variant,
 dimensions, border, quantity, ink cost, and production time. The server

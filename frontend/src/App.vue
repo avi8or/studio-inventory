@@ -4,6 +4,7 @@ import { frappeRequest } from "frappe-ui";
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
+  Calculator,
   Check,
   ChevronDown,
   ChevronRight,
@@ -25,6 +26,7 @@ import {
   X,
 } from "@lucide/vue";
 import BarcodeSvg from "./BarcodeSvg.vue";
+import PriceCalculator from "./PriceCalculator.vue";
 import ScannerCommandCard from "./ScannerCommandCard.vue";
 import {
   filterLabels,
@@ -34,9 +36,9 @@ import {
 } from "./labelCatalog.js";
 import {
   applyNumericKey,
-  inventoryModeFromUrl,
   inventoryUrl,
   parseScannerCommand,
+  studioModeFromUrl,
 } from "./scannerCommands.js";
 import {
   buyingPriceFor,
@@ -66,6 +68,7 @@ const VIEW_COPY = {
 };
 
 const NAV_ITEMS = [
+  { id: "price", label: "Price calculator", icon: Calculator, permission: "price" },
   { id: "receive", label: "Receive", icon: PackagePlus, permission: "receive" },
   { id: "consume", label: "Consume", icon: ArrowUpFromLine, permission: "consume" },
   { id: "count", label: "Count", icon: ClipboardCheck, permission: "count" },
@@ -116,13 +119,23 @@ const page = computed(() => {
   if (VIEW_COPY[activeView.value]) return VIEW_COPY[activeView.value];
   if (activeView.value === "activity") return { title: "Activity", action: "Inventory history" };
   if (activeView.value === "commands") return { title: "Command card", action: "Scanner controls" };
+  if (activeView.value === "price") return { title: "Price calculator", action: "No quote required" };
   return { title: "Labels", action: "Inventory labels" };
 });
 
 const appBaseUrl = computed(() => inventoryUrl(window.location.origin));
 
-const visibleNav = computed(() =>
-  NAV_ITEMS.filter((item) => !item.permission || options.value.permissions?.[item.permission]),
+const inventoryAllowed = computed(() =>
+  ["receive", "consume", "count"].some((permission) => options.value.permissions?.[permission]),
+);
+
+const visibleNav = computed(() => NAV_ITEMS.filter((item) => {
+  if (["activity", "labels", "commands"].includes(item.id)) return inventoryAllowed.value;
+  return !item.permission || options.value.permissions?.[item.permission];
+}));
+
+const hasInventoryNavigation = computed(() =>
+  visibleNav.value.some((item) => ["receive", "consume", "count"].includes(item.id)),
 );
 
 const selectedPurchaseUom = computed(() =>
@@ -311,7 +324,7 @@ async function openLabels(codes = []) {
 
 function updateModeUrl(view) {
   const url = new URL(window.location.href);
-  if (VIEW_COPY[view]) url.searchParams.set("mode", view);
+  if (VIEW_COPY[view] || view === "price") url.searchParams.set("mode", view);
   else url.searchParams.delete("mode");
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
@@ -653,8 +666,14 @@ function toggleAllLabels() {
 
 onMounted(async () => {
   try {
+    const requestedMode = studioModeFromUrl(window.location.href, window.location.origin);
+    const permissions = await call("get_app_permissions");
+    options.value.permissions = permissions;
+    if ((requestedMode === "price" && permissions.price) || (!inventoryAllowed.value && permissions.price)) {
+      activeView.value = "price";
+      return;
+    }
     await Promise.all([loadOptions(), loadActivity()]);
-    const requestedMode = inventoryModeFromUrl(window.location.href, window.location.origin);
     if (requestedMode && options.value.permissions?.[requestedMode]) await navigate(requestedMode);
     await focusScanner();
   } catch (error) {
@@ -704,7 +723,7 @@ onMounted(async () => {
       </nav>
 
       <div class="sidebar-footer">
-        <div class="scanner-status">
+        <div v-if="hasInventoryNavigation" class="scanner-status">
           <span class="status-dot" />
           <div><strong>Barcode input</strong><span>Type a code or connect an HID scanner</span></div>
         </div>
@@ -720,12 +739,14 @@ onMounted(async () => {
         </div>
         <div class="topbar-actions">
           <button v-if="selected" class="button ghost" type="button" @click="selected = null"><X :size="14" /> Close</button>
-          <button class="button primary" type="button" @click="navigate('activity')"><Clock3 :size="14" /> Recent</button>
+          <button v-if="activeView !== 'price'" class="button primary" type="button" @click="navigate('activity')"><Clock3 :size="14" /> Recent</button>
         </div>
       </header>
 
       <main class="main-area">
-        <div v-if="VIEW_COPY[activeView]" class="scanner-page">
+        <PriceCalculator v-if="activeView === 'price'" />
+
+        <div v-else-if="VIEW_COPY[activeView]" class="scanner-page">
           <form class="scan-zone" @submit.prevent="resolveScan">
             <label class="scan-field-wrap">
               <ScanBarcode class="scan-leading-icon" :size="18" />
