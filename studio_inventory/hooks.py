@@ -17,6 +17,18 @@ add_to_apps_screen = [
 	}
 ]
 
+standard_dropdown_items = [
+	{
+		"name1": "studio_inventory_price_calculator",
+		"label": "Price Calculator",
+		"type": "Route",
+		"route": "/studio-inventory?mode=price",
+		"icon": "calculator",
+		"open_in_new_window": 0,
+		"is_standard": 1,
+	}
+]
+
 website_route_rules = [
 	{"from_route": "/studio-inventory", "to_route": "studio_inventory"},
 	{"from_route": "/studio-inventory/<path:app_path>", "to_route": "studio_inventory"},
