@@ -331,7 +331,7 @@ def _crm_deal_form_script() -> str:
 			this.actions.push({
 				label: __(\"Price Calculator\"),
 				icon: \"calculator\",
-				onClick: () => window.open(\"/studio-inventory?mode=price\", \"_blank\"),
+				onClick: () => window.location.assign(\"/studio-inventory?mode=price\"),
 			})
 		}
 		if (this.doc.__newDocument) return

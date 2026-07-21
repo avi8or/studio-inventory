@@ -76,8 +76,9 @@ pack conversion. Merchant URL and Price Last Verified are optional fields on
 Item Price.
 
 If Frappe CRM is installed, run migrate after installing the app. The migration
-adds the CRM Deal quotation link, a save-nothing **Price Calculator** action,
-and the **Create Print Quotation** action. Leave
+adds a global **Price Calculator** entry to the CRM logo menu, the same
+save-nothing shortcut on CRM Deals, the CRM Deal quotation link, and the
+**Create Print Quotation** action. Leave
 Frappe CRM's full ERPNext integration disabled unless its Item-to-Product sync
 policy is acceptable for the site.
 

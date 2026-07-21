@@ -76,7 +76,7 @@ class SetupImportTests(unittest.TestCase):
 		script = module._crm_deal_form_script()
 
 		self.assertIn('label: __("Price Calculator")', script)
-		self.assertIn('window.open("/studio-inventory?mode=price", "_blank")', script)
+		self.assertIn('window.location.assign("/studio-inventory?mode=price")', script)
 		self.assertIn('label: __("Create Print Quotation")', script)
 
 
