@@ -7,7 +7,7 @@ from urllib.parse import urlencode
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_url_to_list, getdate, nowdate
+from frappe.utils import cint, flt, get_url_to_list, getdate, nowdate
 
 from studio_inventory.domain import DomainError
 from studio_inventory.permissions import has_pricing_access
@@ -309,12 +309,12 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 
 
 @frappe.whitelist(methods=["POST"])
-def get_pricing_context() -> dict:
+def get_pricing_context(include_paper_items: bool = False) -> dict:
 	_check_pricing_permission()
 	settings = _pricing_settings()
 	rules = _rules(settings)
 	company = _company(settings)
-	return {
+	context = {
 		"company": company,
 		"currency": frappe.db.get_value("Company", company, "default_currency") if company else None,
 		"default_print_item": settings.default_print_item,
@@ -322,8 +322,10 @@ def get_pricing_context() -> dict:
 		"ink_cost_per_sq_in": rules.ink_cost_per_sq_in,
 		"low_margin_threshold_pct": rules.low_margin_threshold_pct,
 		"can_override_cost": _can_override_cost(),
-		"paper_items": _paper_options(),
 	}
+	if cint(include_paper_items):
+		context["paper_items"] = _paper_options()
+	return context
 
 
 @frappe.whitelist(methods=["POST"])

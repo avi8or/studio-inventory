@@ -274,7 +274,19 @@ def get_app_permissions() -> dict[str, bool]:
 
 
 @frappe.whitelist(methods=["POST"])
-def get_options() -> dict:
+def get_options(price_only: bool = False) -> dict:
+	permissions = get_app_permissions()
+	if cint(price_only):
+		return {
+			"warehouses": [],
+			"suppliers": [],
+			"internal_barcode_prefix": None,
+			"default_company": None,
+			"default_warehouse": None,
+			"default_supplier": None,
+			"permissions": permissions,
+		}
+
 	warehouses = frappe.get_list(
 		"Warehouse",
 		filters={"is_group": 0, "disabled": 0},
@@ -303,7 +315,7 @@ def get_options() -> dict:
 		"default_company": default_company,
 		"default_warehouse": default_warehouse,
 		"default_supplier": frappe.defaults.get_user_default("Supplier"),
-		"permissions": get_app_permissions(),
+		"permissions": permissions,
 	}
 
 

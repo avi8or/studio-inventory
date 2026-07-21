@@ -70,6 +70,20 @@ class ApiImportTests(unittest.TestCase):
 			},
 		)
 
+		frappe.get_list = lambda *_args, **_kwargs: self.fail("price-only startup queried inventory")
+		self.assertEqual(
+			module.get_options(price_only=True),
+			{
+				"warehouses": [],
+				"suppliers": [],
+				"internal_barcode_prefix": None,
+				"default_company": None,
+				"default_warehouse": None,
+				"default_supplier": None,
+				"permissions": module.get_app_permissions(),
+			},
+		)
+
 		frappe.get_cached_doc = lambda doctype: types.SimpleNamespace(internal_barcode_prefix="LP")
 
 		warehouses = [

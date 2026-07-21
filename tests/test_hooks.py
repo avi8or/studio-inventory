@@ -13,7 +13,7 @@ class WebsiteRouteTests(unittest.TestCase):
 				"route": "/studio-inventory?mode=price",
 				"icon": "calculator",
 				"open_in_new_window": 0,
-				"is_standard": 1,
+				"is_standard": 0,
 			},
 			standard_dropdown_items,
 		)

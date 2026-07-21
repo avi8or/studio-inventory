@@ -17,6 +17,7 @@ add_to_apps_screen = [
 	}
 ]
 
+# CRM reserves standard dropdown items for its fixed built-in action switch.
 standard_dropdown_items = [
 	{
 		"name1": "studio_inventory_price_calculator",
@@ -25,7 +26,7 @@ standard_dropdown_items = [
 		"route": "/studio-inventory?mode=price",
 		"icon": "calculator",
 		"open_in_new_window": 0,
-		"is_standard": 1,
+		"is_standard": 0,
 	}
 ]
 
