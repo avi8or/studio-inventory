@@ -1660,9 +1660,12 @@ select:disabled {
 
 .price-workspace {
   display: grid;
+  width: 100%;
+  max-width: 1300px;
   min-height: 0;
   flex: 1;
-  grid-template-columns: minmax(480px, 1fr) 370px;
+  grid-template-columns: minmax(480px, 1fr) minmax(340px, 370px);
+  margin: 0 auto;
   overflow: hidden;
 }
 
@@ -1717,6 +1720,58 @@ select:disabled {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 14px 12px;
+}
+
+.price-size-tools {
+  display: flex;
+  max-width: 760px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.price-size-tools > span {
+  margin-right: 2px;
+  color: var(--ink-gray-5);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.price-size-presets {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.price-size-preset {
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--outline-gray);
+  border-radius: 6px;
+  color: var(--ink-gray-6);
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.price-size-preset:hover {
+  background: var(--surface-gray-2);
+}
+
+.price-size-preset.active {
+  border-color: var(--ink-gray-8);
+  color: #fff;
+  background: var(--surface-gray-10);
+}
+
+.price-swap {
+  margin-left: auto;
+}
+
+.price-mobile-section-toggle {
+  display: none;
 }
 
 .price-field-wide {
@@ -1829,11 +1884,19 @@ select:disabled {
 }
 
 .paper-options-empty,
-.paper-options-limit {
+.paper-options-limit,
+.paper-options-heading {
   padding: 11px;
   color: var(--ink-gray-5);
   font-size: 10.5px;
   line-height: 1.4;
+}
+
+.paper-options-heading {
+  padding-bottom: 7px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .paper-options-limit {
@@ -1893,22 +1956,70 @@ select:disabled {
   margin-top: 18px;
 }
 
-.price-form-footer {
+.price-action-bar {
   display: flex;
-  max-width: 760px;
+  z-index: 20;
+  min-width: 0;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 20px;
+  padding: 10px max(28px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(28px, env(safe-area-inset-left, 0px));
+  border-top: 1px solid var(--outline-gray);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.04);
 }
 
-.price-form-footer > span {
+.price-action-total {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  justify-content: start;
+  column-gap: 8px;
+}
+
+.price-action-total > span,
+.price-action-total > small {
   color: var(--ink-gray-5);
   font-size: 10.5px;
 }
 
+.price-action-total > span {
+  font-weight: 550;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.price-action-total > strong {
+  color: var(--ink-gray-8);
+  font-size: 20px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.price-action-total > small {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.price-breakdown-link {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  color: var(--blue-6);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
 .price-calculate {
-  min-height: 34px;
+  min-height: 40px;
+  flex: 0 0 auto;
   padding-inline: 14px;
 }
 
@@ -1918,6 +2029,11 @@ select:disabled {
   border-left: 1px solid var(--outline-gray);
   background: var(--surface-gray-1);
   overflow-y: auto;
+}
+
+.price-results-mobile-head,
+.price-results-scrim {
+  display: none;
 }
 
 .price-empty-result {
@@ -1953,6 +2069,11 @@ select:disabled {
   line-height: 1.5;
 }
 
+.price-stale-result > div {
+  color: var(--amber-7);
+  background: var(--amber-2);
+}
+
 .price-result-header {
   display: flex;
   align-items: center;
@@ -1976,6 +2097,25 @@ select:disabled {
   font-size: 34px;
   font-weight: 650;
   letter-spacing: -0.04em;
+}
+
+.price-result-paper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 0 2px;
+  color: var(--ink-gray-5);
+  font-size: 10.5px;
+}
+
+.price-result-paper strong {
+  max-width: 72%;
+  color: var(--ink-gray-8);
+  font-weight: 550;
+  line-height: 1.35;
+  text-align: right;
 }
 
 .price-total-card {
@@ -2115,8 +2255,26 @@ select:disabled {
 }
 
 @media (max-width: 639px) {
+  .filter-row.price-heading {
+    align-items: flex-start;
+    flex-direction: row;
+    gap: 10px;
+  }
+
+  .price-heading .page-description {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .price-reset {
+    min-height: 30px;
+    flex: 0 0 auto;
+    padding-inline: 7px;
+    background: transparent;
+  }
+
   .price-form {
-    padding: 4px 16px 24px;
+    padding: 4px 16px 16px;
   }
 
   .price-section {
@@ -2145,9 +2303,116 @@ select:disabled {
     grid-template-columns: 1fr;
   }
 
-  .price-form-footer {
-    align-items: stretch;
+  .price-size-tools {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+  }
+
+  .price-size-tools > span {
+    width: 100%;
+  }
+
+  .price-size-presets {
+    flex: 1;
+    flex-wrap: wrap;
+  }
+
+  .price-size-preset,
+  .price-swap {
+    min-height: 40px;
+  }
+
+  .price-swap {
+    margin-left: 0;
+  }
+
+  .price-internal-section > .price-section-heading {
+    display: none;
+  }
+
+  .price-mobile-section-toggle {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 0;
+    border: 0;
+    color: var(--ink-gray-8);
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+  }
+
+  .price-mobile-section-toggle > span {
+    display: grid;
+    width: 25px;
+    height: 25px;
+    flex: 0 0 25px;
+    place-items: center;
+    border-radius: 50%;
+    color: var(--ink-gray-6);
+    background: var(--surface-gray-2);
+    font-size: 9px;
+    font-weight: 600;
+  }
+
+  .price-mobile-section-toggle > div {
+    display: flex;
+    min-width: 0;
+    flex: 1;
     flex-direction: column;
+    gap: 3px;
+  }
+
+  .price-mobile-section-toggle strong {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .price-mobile-section-toggle small {
+    overflow: hidden;
+    color: var(--ink-gray-5);
+    font-size: 11px;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .price-mobile-section-toggle > svg {
+    margin-top: 4px;
+    color: var(--ink-gray-5);
+    transition: transform 150ms ease;
+  }
+
+  .price-internal-section.open .price-mobile-section-toggle > svg {
+    transform: rotate(180deg);
+  }
+
+  .price-internal-fields {
+    display: none;
+    margin-top: 16px;
+  }
+
+  .price-internal-section.open .price-internal-fields {
+    display: grid;
+  }
+
+  .price-action-bar {
+    padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  }
+
+  .price-action-total > small {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px 7px;
+    white-space: normal;
+  }
+
+  .price-breakdown-link {
+    display: inline-flex;
   }
 
   .price-calculate {
@@ -2156,7 +2421,51 @@ select:disabled {
   }
 
   .price-results {
-    padding: 20px 16px;
+    display: none;
+  }
+
+  .price-results.mobile-open {
+    position: fixed;
+    z-index: 61;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: block;
+    max-height: 78dvh;
+    padding: 0 16px calc(20px + env(safe-area-inset-bottom, 0px));
+    border: 0;
+    border-radius: 14px 14px 0 0;
+    background: var(--surface-gray-1);
+    box-shadow: var(--shadow-panel);
+    overflow-y: auto;
+  }
+
+  .price-results-mobile-head {
+    position: sticky;
+    z-index: 1;
+    top: 0;
+    display: flex;
+    min-height: 52px;
+    align-items: center;
+    justify-content: space-between;
+    margin: 0 -16px 8px;
+    padding: 8px 10px 8px 16px;
+    border-bottom: 1px solid var(--outline-gray);
+    background: var(--surface-gray-1);
+  }
+
+  .price-results-mobile-head strong {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .price-results-scrim {
+    position: fixed;
+    z-index: 60;
+    inset: 0;
+    display: block;
+    border: 0;
+    background: rgba(0, 0, 0, 0.28);
   }
 
   body {
