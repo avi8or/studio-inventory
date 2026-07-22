@@ -1723,6 +1723,126 @@ select:disabled {
   grid-column: 1 / -1;
 }
 
+.paper-picker {
+  position: relative;
+}
+
+.paper-picker > label {
+  color: var(--ink-gray-5);
+  font-size: 11px;
+}
+
+.paper-combobox {
+  position: relative;
+}
+
+.paper-combobox > input {
+  height: 40px;
+  padding-right: 32px;
+  padding-left: 34px;
+}
+
+.paper-search-icon {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 11px;
+  color: var(--ink-gray-5);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.paper-options {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  max-height: min(360px, 50vh);
+  max-height: min(360px, 50dvh);
+  border: 1px solid var(--outline-gray);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: var(--shadow-panel);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.paper-option {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 11px;
+  border: 0;
+  border-top: 1px solid #f2f2f2;
+  color: var(--ink-gray-8);
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.paper-option:first-child {
+  border-top: 0;
+}
+
+.paper-option.active,
+.paper-option:hover {
+  background: var(--surface-gray-2);
+}
+
+.paper-option.selected {
+  color: var(--blue-6);
+  background: var(--blue-1);
+}
+
+.paper-option > span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.paper-option strong,
+.paper-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.paper-option strong {
+  font-size: 12px;
+  font-weight: 550;
+}
+
+.paper-option small {
+  color: var(--ink-gray-5);
+  font-size: 10px;
+}
+
+.paper-option > svg {
+  flex: 0 0 auto;
+}
+
+.paper-options-empty,
+.paper-options-limit {
+  padding: 11px;
+  color: var(--ink-gray-5);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.paper-options-limit {
+  position: sticky;
+  bottom: 0;
+  border-top: 1px solid var(--outline-gray);
+  background: var(--surface-gray-1);
+}
+
 .price-section > .field + .field {
   margin-top: 14px;
 }
@@ -1999,6 +2119,28 @@ select:disabled {
     padding: 4px 16px 24px;
   }
 
+  .price-section {
+    padding: 18px 0 20px;
+  }
+
+  .price-section-heading small {
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  .price-page .field input,
+  .price-page .readonly-field > div {
+    min-height: 44px;
+  }
+
+  .paper-combobox > input {
+    min-height: 48px;
+  }
+
+  .paper-option {
+    min-height: 52px;
+  }
+
   .price-field-grid {
     grid-template-columns: 1fr;
   }
@@ -2006,6 +2148,11 @@ select:disabled {
   .price-form-footer {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .price-calculate {
+    min-height: 44px;
+    justify-content: center;
   }
 
   .price-results {
