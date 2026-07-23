@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import sys
 import types
 import unittest
@@ -119,6 +120,181 @@ class PricingApiAccessTests(unittest.TestCase):
 		basis = module._cost_basis(item, settings)
 
 		self.assertEqual(basis["last_verified_on"], "2026-07-20")
+
+	def test_pricing_basis_uses_the_smallest_costed_sibling_that_fits(self):
+		module, frappe = self.load_module()
+		settings = types.SimpleNamespace(paper_cost_price_list="Standard Buying")
+		items = {
+			width: types.SimpleNamespace(
+				name=f"PAPER-{width}",
+				item_name=f"Paper {width} inch roll",
+				stock_uom="Foot",
+				variant_of="PAPER-ROLL-TEMPLATE",
+			)
+			for width in (17, 24, 44)
+		}
+		bases = {
+			17: {"item_code": "PAPER-17", "cost_per_sq_in": 0.024},
+			24: {"item_code": "PAPER-24", "cost_per_sq_in": 0.0227},
+			44: {"item_code": "PAPER-44", "cost_per_sq_in": 0.0222},
+		}
+		frappe.get_list = lambda *_args, **_kwargs: [
+			types.SimpleNamespace(name=item.name)
+			for item in items.values()
+		]
+		frappe.get_doc = lambda _doctype, name: next(
+			item for item in items.values() if item.name == name
+		)
+		module._item_dimensions = lambda item: module.PaperDimensions(
+			stock_uom="Foot",
+			width_in=float(item.name.removeprefix("PAPER-")),
+		)
+		module._cost_basis = lambda item, _settings: bases[int(item.name.removeprefix("PAPER-"))]
+
+		from_24 = module._pricing_cost_basis(
+			items[24],
+			settings=settings,
+			finished_width_in=20,
+			finished_height_in=24,
+			selected_basis=bases[24],
+		)
+		from_44 = module._pricing_cost_basis(
+			items[44],
+			settings=settings,
+			finished_width_in=20,
+			finished_height_in=24,
+			selected_basis=bases[44],
+		)
+
+		self.assertEqual(from_24["item_code"], "PAPER-24")
+		self.assertEqual(from_44["item_code"], "PAPER-24")
+		self.assertEqual(from_24["cost_per_sq_in"], from_44["cost_per_sq_in"])
+
+	def test_calculation_separates_pricing_basis_from_actual_stock_cost(self):
+		module, _frappe = self.load_module()
+		settings = types.SimpleNamespace(default_print_item="PRINT-SERVICE")
+		print_item = types.SimpleNamespace(name="PRINT-SERVICE", item_name="Custom Print")
+		paper_item = types.SimpleNamespace(
+			name="PAPER-44",
+			item_name="Paper 44 inch roll",
+			stock_uom="Foot",
+		)
+		dimensions = module.PaperDimensions(stock_uom="Foot", width_in=44)
+		actual_basis = {
+			"item_code": "PAPER-44",
+			"item_name": "Paper 44 inch roll",
+			"cost_per_sq_in": 0.02,
+		}
+		pricing_basis = {
+			"item_code": "PAPER-24",
+			"item_name": "Paper 24 inch roll",
+			"cost_per_sq_in": 0.01,
+		}
+		module._active_pricing_model = lambda _settings: None
+		module._print_item = lambda _item_code: print_item
+		module._paper_item = lambda _item_code: paper_item
+		module._item_dimensions = lambda _item: dimensions
+		module._cost_basis = lambda _item, _settings: actual_basis
+		module._pricing_cost_basis = lambda *_args, **_kwargs: pricing_basis
+		module._rules = lambda *_args, **_kwargs: module.PricingRules()
+
+		result = module._calculation_payload(
+			{
+				"print_item": "PRINT-SERVICE",
+				"paper_item": "PAPER-44",
+				"artwork_width_in": 8,
+				"artwork_height_in": 10,
+				"border_in": 0,
+				"quantity": 1,
+				"time_minutes": 0,
+			},
+			settings=settings,
+		)
+		snapshot = json.loads(result["snapshot"])
+
+		self.assertEqual(result["paper_cost_per_sq_in"], 0.02)
+		self.assertEqual(result["pricing_paper_cost_per_sq_in"], 0.01)
+		self.assertEqual(result["pricing_cost_source"]["item_code"], "PAPER-24")
+		self.assertEqual(result["calculation"]["unit_paper_cost"], 0.8)
+		self.assertEqual(result["calculation"]["actual_unit_paper_cost"], 10.56)
+		self.assertEqual(snapshot["inputs"]["paper_cost_per_sq_in"], 0.02)
+		self.assertEqual(snapshot["inputs"]["pricing_paper_cost_per_sq_in"], 0.01)
+
+	def test_snapshot_pricing_cost_falls_back_for_formula_version_two(self):
+		module, _frappe = self.load_module()
+		row = types.SimpleNamespace(si_paper_cost_per_sq_in=0.02)
+
+		self.assertEqual(
+			module._snapshot_pricing_cost(
+				row,
+				{"inputs": {"pricing_paper_cost_per_sq_in": 0.01}},
+			),
+			0.01,
+		)
+		self.assertEqual(
+			module._snapshot_pricing_cost(row, {"inputs": {}}),
+			0.02,
+		)
+
+	def test_estimate_validation_keeps_pricing_and_actual_stock_cost_separate(self):
+		module, _frappe = self.load_module()
+		captured = {}
+
+		class Row(types.SimpleNamespace):
+			def get(self, name):
+				return getattr(self, name, None)
+
+		class Estimate:
+			def __init__(self, row):
+				self.items = [row]
+				self.recalculated = False
+
+			def calculate_taxes_and_totals(self):
+				self.recalculated = True
+
+		row = Row(
+			si_is_calculated_print=1,
+			si_paper_item="PAPER-44",
+			si_artwork_width_in=8,
+			si_artwork_height_in=10,
+			si_border_in=0,
+			qty=1,
+			si_time_minutes=0,
+			si_ink_cost_per_sq_in=0.012,
+			si_paper_cost_per_sq_in=0.02,
+			discount_percentage=0,
+			discount_amount=0,
+		)
+		snapshot = {
+			"pricing_model": None,
+			"inputs": {"pricing_paper_cost_per_sq_in": 0.01},
+			"rules": module.asdict(module.PricingRules()),
+			"price_adjustments": [],
+			"matched_rules": [],
+		}
+		estimate = Estimate(row)
+		module._pricing_settings = lambda: types.SimpleNamespace()
+		module._paper_item = lambda _item_code: types.SimpleNamespace()
+		module._item_dimensions = lambda _item: module.PaperDimensions(stock_uom="Foot", width_in=44)
+		module._stored_snapshot = lambda _row: snapshot
+		original_consumed_paper_cost = module.consumed_paper_cost
+		original_calculate_print_price = module.calculate_print_price
+
+		def consumed_paper_cost(**kwargs):
+			captured["actual_rate"] = kwargs["paper_cost_per_sq_in"]
+			return original_consumed_paper_cost(**kwargs)
+
+		def calculate_print_price(**kwargs):
+			captured["pricing_rate"] = kwargs["paper_cost_per_sq_in"]
+			return original_calculate_print_price(**kwargs)
+
+		module.consumed_paper_cost = consumed_paper_cost
+		module.calculate_print_price = calculate_print_price
+
+		module.validate_quotation(estimate)
+
+		self.assertEqual(captured, {"actual_rate": 0.02, "pricing_rate": 0.01})
+		self.assertTrue(estimate.recalculated)
 
 	def test_existing_calculation_snapshot_freezes_its_model_values(self):
 		module, _frappe = self.load_module()

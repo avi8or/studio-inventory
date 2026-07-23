@@ -567,6 +567,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
             <h3>Internal economics</h3>
             <div v-if="result.pricing_model"><span>Pricing model</span><strong>{{ result.pricing_model.name }} · r{{ result.pricing_model.revision }}</strong></div>
             <div v-if="result.matched_rules?.length"><span>Matched rules</span><strong>{{ result.matched_rules.map((rule) => rule.rule_name).join(", ") }}</strong></div>
+            <div v-if="result.pricing_cost_source?.item_code && result.pricing_cost_source.item_code !== result.paper_item.item_code"><span>Pricing paper basis</span><strong>{{ result.pricing_cost_source.item_name || result.pricing_cost_source.item_code }}</strong></div>
             <div><span>Total cost</span><strong>{{ money(result.calculation.total_cost) }}</strong></div>
             <div><span>Gross profit</span><strong>{{ money(result.calculation.gross_profit) }}</strong></div>
             <div><span>Gross margin</span><strong>{{ number(result.calculation.gross_margin_pct, 1) }}%</strong></div>

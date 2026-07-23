@@ -9,7 +9,7 @@ from typing import Mapping, Sequence
 from studio_inventory.domain import DomainError
 
 
-FORMULA_VERSION = "2"
+FORMULA_VERSION = "3"
 
 
 @dataclass(frozen=True)

@@ -39,13 +39,14 @@ so ERPNext continues to own taxes, discounts, terms, printing, amendments, and
 Sales Order conversion. Sales Order is displayed as **Client Order**; no
 separate job or fulfillment ledger is created.
 
-The customer-facing base rate uses the finished print and selected paper cost,
-not the width of the loaded roll. Internal paper cost and margin use the actual
-estimated sheets or roll length consumed, so unused stock width reduces margin
-without making the same print more expensive merely because it was loaded on a
-wider roll. A model or conditional rule can optionally enforce a minimum
-pricing margin based on finished-area cost, while the realized-margin warning
-continues to include actual stock waste.
+The customer-facing base rate uses the finished print and the smallest costed
+Item variant in the selected paper's native Item-template family that can fit
+it, not the width of the loaded roll. Internal paper cost and margin use the
+selected Item's actual rate and estimated sheets or roll length consumed, so
+unused stock width reduces margin without making the same print more expensive
+merely because it was loaded on a wider roll. A model or conditional rule can
+optionally enforce a minimum pricing margin based on finished-area cost, while
+the realized-margin warning continues to include actual stock waste.
 
 `Studio Pricing Settings` selects the active `Studio Pricing Model` and holds
 the default sellable print Item, Company, and paper-cost Buying Price List.

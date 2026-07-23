@@ -12,3 +12,8 @@ test("a calculator opened from an Estimate Request can start a native Estimate",
   assert.match(calculator, /crm_deal: props\.estimateRequest/);
   assert.match(calculator, /Start Estimate/);
 });
+
+test("the calculator distinguishes pricing paper from loaded stock", () => {
+  assert.match(calculator, /Pricing paper basis/);
+  assert.match(calculator, /pricing_cost_source/);
+});

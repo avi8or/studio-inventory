@@ -21,6 +21,7 @@ from studio_inventory.pricing import (
 	cost_per_sq_in,
 	estimate_consumption,
 	parse_paper_dimensions,
+	stock_area_sq_in,
 )
 from studio_inventory.pricing_model import (
 	PricingResolution,
@@ -221,6 +222,8 @@ def _cost_basis(item, settings=None) -> dict[str, Any] | None:
 		key=lambda candidate: (candidate[0], flt(candidate[1].price_list_rate)),
 	)
 	return {
+		"item_code": item.name,
+		"item_name": getattr(item, "item_name", item.name),
 		"cost_per_sq_in": cost,
 		"item_price": row.name,
 		"price_list": row.price_list,
@@ -234,6 +237,78 @@ def _cost_basis(item, settings=None) -> dict[str, Any] | None:
 		),
 		"note": row.note,
 	}
+
+
+def _paper_fits_finished_size(
+	dimensions: PaperDimensions,
+	finished_width_in: float,
+	finished_height_in: float,
+) -> bool:
+	if dimensions.stock_uom == "Foot":
+		return min(finished_width_in, finished_height_in) <= dimensions.width_in + 1e-9
+	if dimensions.stock_uom == "Sheet" and dimensions.height_in:
+		return (
+			finished_width_in <= dimensions.width_in + 1e-9
+			and finished_height_in <= dimensions.height_in + 1e-9
+		) or (
+			finished_height_in <= dimensions.width_in + 1e-9
+			and finished_width_in <= dimensions.height_in + 1e-9
+		)
+	return False
+
+
+def _pricing_cost_basis(
+	item,
+	*,
+	settings,
+	finished_width_in: float,
+	finished_height_in: float,
+	selected_basis: dict[str, Any],
+) -> dict[str, Any]:
+	template = getattr(item, "variant_of", None)
+	if not template:
+		return selected_basis
+
+	rows = frappe.get_list(
+		"Item",
+		filters={
+			"variant_of": template,
+			"disabled": 0,
+			"is_stock_item": 1,
+			"has_variants": 0,
+			"stock_uom": item.stock_uom,
+		},
+		fields=["name"],
+		limit_page_length=0,
+	)
+	candidates = []
+	for row in rows:
+		sibling = item if row.name == item.name else frappe.get_doc("Item", row.name)
+		try:
+			dimensions = _item_dimensions(sibling)
+			if not _paper_fits_finished_size(
+				dimensions,
+				finished_width_in,
+				finished_height_in,
+			):
+				continue
+			basis = selected_basis if sibling.name == item.name else _cost_basis(sibling, settings)
+		except DomainError:
+			continue
+		if not basis:
+			continue
+		stock_size = (
+			dimensions.width_in
+			if dimensions.stock_uom == "Foot"
+			else stock_area_sq_in(dimensions)
+		)
+		candidates.append((stock_size, -basis["cost_per_sq_in"], sibling.name, basis))
+
+	if not candidates:
+		return selected_basis
+	basis = dict(min(candidates, key=lambda candidate: candidate[:3])[3])
+	basis["family_template"] = template
+	return basis
 
 
 def _can_override_cost() -> bool:
@@ -267,6 +342,8 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 	print_item = _print_item(str(data.get("print_item") or settings.default_print_item or ""))
 	paper_item = _paper_item(str(data.get("paper_item") or ""))
 	dimensions = _item_dimensions(paper_item)
+	finished_width = flt(data.get("artwork_width_in")) + flt(data.get("border_in")) * 2
+	finished_height = flt(data.get("artwork_height_in")) + flt(data.get("border_in")) * 2
 	cost_override = data.get("cost_override")
 	if cost_override in (None, ""):
 		basis = _cost_basis(paper_item, settings)
@@ -280,32 +357,41 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 				),
 				frappe.ValidationError,
 			)
-		paper_cost = basis["cost_per_sq_in"]
+		actual_paper_cost_rate = basis["cost_per_sq_in"]
+		pricing_basis = _pricing_cost_basis(
+			paper_item,
+			settings=settings,
+			finished_width_in=finished_width,
+			finished_height_in=finished_height,
+			selected_basis=basis,
+		)
+		pricing_paper_cost_rate = pricing_basis["cost_per_sq_in"]
 		cost_source = basis
+		pricing_cost_source = pricing_basis
 		cost_was_overridden = False
 	else:
 		if not _can_override_cost():
 			frappe.throw(_("Only a Sales Manager or System Manager can override paper cost."), frappe.PermissionError)
 		try:
-			paper_cost = float(cost_override)
+			actual_paper_cost_rate = float(cost_override)
 		except (TypeError, ValueError) as error:
 			raise DomainError("Paper cost override must be a number.") from error
-		cost_source = {"cost_per_sq_in": paper_cost, "override": True}
+		pricing_paper_cost_rate = actual_paper_cost_rate
+		cost_source = {"cost_per_sq_in": actual_paper_cost_rate, "override": True}
+		pricing_cost_source = cost_source
 		cost_was_overridden = True
 
 	resolution = _pricing_resolution(
 		settings=settings,
 		model=model,
 		paper_item=paper_item,
-		paper_cost_per_sq_in=paper_cost,
+		paper_cost_per_sq_in=pricing_paper_cost_rate,
 		data=data,
 	)
 	rules = resolution.rules
 	ink_cost = data.get("ink_cost_per_sq_in")
 	if ink_cost in (None, ""):
 		ink_cost = rules.ink_cost_per_sq_in
-	finished_width = flt(data.get("artwork_width_in")) + flt(data.get("border_in")) * 2
-	finished_height = flt(data.get("artwork_height_in")) + flt(data.get("border_in")) * 2
 	consumption = estimate_consumption(
 		dimensions=dimensions,
 		finished_width_in=finished_width,
@@ -316,7 +402,7 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 	actual_paper_cost = consumed_paper_cost(
 		dimensions=dimensions,
 		consumption_quantity=consumption.quantity,
-		paper_cost_per_sq_in=paper_cost,
+		paper_cost_per_sq_in=actual_paper_cost_rate,
 	)
 	calculation = calculate_print_price(
 		artwork_width_in=data.get("artwork_width_in"),
@@ -325,7 +411,7 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 		quantity=data.get("quantity", 1),
 		time_minutes=data.get("time_minutes", 0),
 		ink_cost_per_sq_in=ink_cost,
-		paper_cost_per_sq_in=paper_cost,
+		paper_cost_per_sq_in=pricing_paper_cost_rate,
 		rules=rules,
 		price_adjustments=resolution.price_adjustments,
 		actual_paper_cost=actual_paper_cost,
@@ -358,7 +444,8 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 			"quantity": calculation.quantity,
 			"time_minutes": flt(data.get("time_minutes")),
 			"ink_cost_per_sq_in": flt(ink_cost),
-			"paper_cost_per_sq_in": paper_cost,
+			"paper_cost_per_sq_in": actual_paper_cost_rate,
+			"pricing_paper_cost_per_sq_in": pricing_paper_cost_rate,
 		},
 		"rules": asdict(rules),
 		"price_adjustments": [
@@ -367,6 +454,7 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 		],
 		"matched_rules": list(resolution.matched_rules),
 		"cost_source": cost_source,
+		"pricing_cost_source": pricing_cost_source,
 		"calculation": asdict(calculation),
 		"consumption": asdict(consumption),
 	}
@@ -378,10 +466,12 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 			"stock_uom": paper_item.stock_uom,
 			"dimensions": asdict(dimensions),
 		},
-		"paper_cost_per_sq_in": paper_cost,
+		"paper_cost_per_sq_in": actual_paper_cost_rate,
+		"pricing_paper_cost_per_sq_in": pricing_paper_cost_rate,
 		"pricing_model": _model_snapshot(model),
 		"matched_rules": list(resolution.matched_rules),
 		"cost_source": cost_source,
+		"pricing_cost_source": pricing_cost_source,
 		"cost_was_overridden": cost_was_overridden,
 		"calculation": asdict(calculation),
 		"consumption": asdict(consumption),
@@ -470,6 +560,13 @@ def _stored_price_adjustments(snapshot: dict[str, Any]) -> tuple[PriceAdjustment
 	)
 
 
+def _snapshot_pricing_cost(row, snapshot: dict[str, Any]) -> float:
+	value = (snapshot.get("inputs") or {}).get("pricing_paper_cost_per_sq_in")
+	if value in (None, ""):
+		value = row.si_paper_cost_per_sq_in
+	return flt(value)
+
+
 def _row_pricing_resolution(row, paper_item, settings, snapshot) -> PricingResolution:
 	if snapshot.get("rules"):
 		return PricingResolution(
@@ -482,7 +579,7 @@ def _row_pricing_resolution(row, paper_item, settings, snapshot) -> PricingResol
 		settings=settings,
 		model=model,
 		paper_item=paper_item,
-		paper_cost_per_sq_in=flt(row.si_paper_cost_per_sq_in),
+		paper_cost_per_sq_in=_snapshot_pricing_cost(row, snapshot),
 		data={
 			"artwork_width_in": row.si_artwork_width_in,
 			"artwork_height_in": row.si_artwork_height_in,
@@ -503,6 +600,7 @@ def validate_quotation(doc, method: str | None = None) -> None:
 			snapshot = _stored_snapshot(row)
 			resolution = _row_pricing_resolution(row, paper_item, settings, snapshot)
 			rules = resolution.rules
+			pricing_paper_cost_rate = _snapshot_pricing_cost(row, snapshot)
 			finished_width = flt(row.si_artwork_width_in) + flt(row.si_border_in) * 2
 			finished_height = flt(row.si_artwork_height_in) + flt(row.si_border_in) * 2
 			consumption = estimate_consumption(
@@ -524,7 +622,7 @@ def validate_quotation(doc, method: str | None = None) -> None:
 				quantity=row.qty,
 				time_minutes=row.si_time_minutes,
 				ink_cost_per_sq_in=row.si_ink_cost_per_sq_in,
-				paper_cost_per_sq_in=row.si_paper_cost_per_sq_in,
+				paper_cost_per_sq_in=pricing_paper_cost_rate,
 				rules=rules,
 				price_adjustments=resolution.price_adjustments,
 				actual_paper_cost=actual_paper_cost,
