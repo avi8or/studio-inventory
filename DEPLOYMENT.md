@@ -62,11 +62,15 @@ Open `Studio Pricing Settings` and set:
 - Company
 - Default Print Item
 - Paper Cost Price List, normally `Standard Buying`
-- pricing constants and warning threshold
+- Active Pricing Model
+
+Migration creates `Standard Pricing` from the previous settings. Edit base
+values and conditional rules on `Studio Pricing Model`; the legacy constants
+on `Studio Pricing Settings` are used only when no active model is selected.
 
 The Default Print Item should be an active sellable Item without variants. It
 can be a non-stock service Item such as `Custom Fine Art Print`; paper remains
-raw inventory and is not sold on the Quotation.
+raw inventory and is not sold on the Estimate.
 
 Add a valid Buying Item Price for each quotable Paper Item and purchase UOM.
 For example, a $100 `Roll 50 Foot` price is normalized through its conversion
@@ -77,8 +81,8 @@ Item Price.
 
 If Frappe CRM is installed, run migrate after installing the app. The migration
 adds a global **Price Calculator** entry to the CRM logo menu, the same
-save-nothing shortcut on CRM Deals, the CRM Deal quotation link, and the
-**Create Print Quotation** action. Leave
+save-nothing shortcut on Estimate Requests, the CRM Deal quotation link, and
+the **Create Estimate** action. Leave
 Frappe CRM's full ERPNext integration disabled unless its Item-to-Product sync
 policy is acceptable for the site.
 
@@ -93,8 +97,8 @@ the actions they need:
 | Consume | Stock Entry | Create, Submit |
 | Count | Stock Reconciliation | Create, Submit |
 | Quick undo | The created native document | Cancel |
-| Calculated quote | Quotation | Create, Read, Write, Submit |
-| Quote to order | Sales Order and Customer | Create; Customer create when needed |
+| Calculated Estimate | Quotation | Create, Read, Write, Submit |
+| Estimate to Client Order | Sales Order and Customer | Create; Customer create when needed |
 
 Read permission and User Permissions must also allow the selected Company,
 Warehouse, Item, Item Price, and Supplier. The app does not bypass
@@ -125,11 +129,12 @@ real balances.
    cancelled, not deleted.
 7. Confirm Stock Ledger and accounting entries match the submitted native
    documents.
-8. From a CRM Deal, create a print Quotation and add two calculated print lines.
+8. From an Estimate Request, calculate a print and start an Estimate with the
+   calculated line. Add a second calculated print from the Estimate form.
 9. Confirm taxes, discounts, terms, and the customer print format remain native
    ERPNext behavior.
-10. Submit the Quotation, make a Sales Order, and confirm the CRM Deal link and
-    calculated print specification carry forward.
+10. Submit the Estimate, make a Client Order, and confirm the Estimate Request
+    link and calculated print specification carry forward.
 
 Do not run this smoke test against live inventory until the site owner
 explicitly approves production writes.

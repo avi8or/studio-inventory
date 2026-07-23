@@ -135,7 +135,7 @@ async function open_print_calculator(frm) {
 			{ fieldname: "preview_section", fieldtype: "Section Break", label: __("Preview") },
 			{ fieldname: "preview", fieldtype: "HTML" },
 		],
-		primary_action_label: __("Add to quotation"),
+		primary_action_label: __("Add to Estimate"),
 		primary_action: async (values) => {
 			try {
 				const result = await call_pricing("calculate_print", { payload: values });
@@ -189,6 +189,13 @@ async function add_calculated_row(frm, values, result) {
 	await frappe.model.set_value(row.doctype, row.name, "si_internal_cost", result.calculation.total_cost);
 	await frappe.model.set_value(row.doctype, row.name, "si_gross_margin_pct", result.calculation.gross_margin_pct);
 	await frappe.model.set_value(row.doctype, row.name, "si_formula_version", result.calculation.formula_version);
+	await frappe.model.set_value(row.doctype, row.name, "si_pricing_model", result.pricing_model?.name || "");
+	await frappe.model.set_value(
+		row.doctype,
+		row.name,
+		"si_pricing_model_revision",
+		result.pricing_model?.revision || 0,
+	);
 	await frappe.model.set_value(row.doctype, row.name, "si_calculation_snapshot", result.snapshot);
 	await frappe.model.set_value(row.doctype, row.name, "price_list_rate", result.calculation.list_unit_price);
 	await frappe.model.set_value(row.doctype, row.name, "rate", result.calculation.list_unit_price);

@@ -5,6 +5,7 @@ from studio_inventory.pricing import (
 	PaperDimensions,
 	PricingRules,
 	calculate_print,
+	consumed_paper_cost,
 	cost_per_sq_in,
 	estimate_consumption,
 	parse_paper_dimensions,
@@ -109,6 +110,25 @@ class PricingTests(unittest.TestCase):
 		self.assertEqual(with_time.line_total, without_time.line_total)
 		self.assertLess(with_time.gross_margin_pct, without_time.gross_margin_pct)
 
+	def test_actual_stock_waste_reduces_margin_without_changing_base_price(self):
+		inputs = {
+			"artwork_width_in": 16,
+			"artwork_height_in": 20,
+			"border_in": 2,
+			"quantity": 1,
+			"time_minutes": 0,
+			"ink_cost_per_sq_in": 0.012,
+			"paper_cost_per_sq_in": 0.0070625,
+		}
+
+		narrow_roll = calculate_print(**inputs, actual_paper_cost=4)
+		wide_roll = calculate_print(**inputs, actual_paper_cost=8)
+
+		self.assertEqual(narrow_roll.list_unit_price, wide_roll.list_unit_price)
+		self.assertEqual(narrow_roll.paper_cost, 4)
+		self.assertEqual(wide_roll.paper_cost, 8)
+		self.assertLess(wide_roll.gross_margin_pct, narrow_roll.gross_margin_pct)
+
 	def test_settings_with_blank_values_use_defaults(self):
 		rules = PricingRules.from_mapping({"hourly_rate": None, "material_markup": ""})
 
@@ -117,6 +137,27 @@ class PricingTests(unittest.TestCase):
 
 
 class ConsumptionTests(unittest.TestCase):
+	def test_wider_roll_values_the_unused_width_as_internal_cost(self):
+		finished = {"finished_width_in": 20, "finished_height_in": 24, "quantity": 1}
+		narrow_dimensions = PaperDimensions(stock_uom="Foot", width_in=24)
+		wide_dimensions = PaperDimensions(stock_uom="Foot", width_in=44)
+		narrow_consumption = estimate_consumption(dimensions=narrow_dimensions, **finished)
+		wide_consumption = estimate_consumption(dimensions=wide_dimensions, **finished)
+
+		narrow_cost = consumed_paper_cost(
+			dimensions=narrow_dimensions,
+			consumption_quantity=narrow_consumption.quantity,
+			paper_cost_per_sq_in=0.01,
+		)
+		wide_cost = consumed_paper_cost(
+			dimensions=wide_dimensions,
+			consumption_quantity=wide_consumption.quantity,
+			paper_cost_per_sq_in=0.01,
+		)
+
+		self.assertEqual(narrow_consumption.quantity, wide_consumption.quantity)
+		self.assertGreater(wide_cost, narrow_cost)
+
 	def test_sheet_layout_uses_physical_grid(self):
 		estimate = estimate_consumption(
 			dimensions=PaperDimensions(stock_uom="Sheet", width_in=17, height_in=22),

@@ -15,7 +15,7 @@ frappe.ui.form.on("Sales Order", {
 			frm.__studio_inventory_customer_checked = false;
 			const message = Array.isArray(error?.messages) && error.messages.length
 				? error.messages.join(" ")
-				: error?.message || __("Could not create the ERPNext Customer for this CRM Deal.");
+				: error?.message || __("Could not create the ERPNext Customer for this Estimate Request.");
 			frappe.msgprint({
 				title: __("Customer is required"),
 				message: frappe.utils.escape_html(message),

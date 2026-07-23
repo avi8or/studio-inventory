@@ -1633,6 +1633,18 @@ select:disabled {
   flex: 0 0 auto;
 }
 
+.price-heading-actions,
+.price-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.price-action-buttons {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .price-loading {
   display: flex;
   flex: 1;
@@ -2266,6 +2278,10 @@ select:disabled {
     flex: 1;
   }
 
+  .price-heading-actions {
+    flex: 0 0 auto;
+  }
+
   .price-reset {
     min-height: 30px;
     flex: 0 0 auto;
@@ -2401,6 +2417,21 @@ select:disabled {
 
   .price-action-bar {
     padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  }
+
+  .price-action-bar.has-estimate-action {
+    flex-wrap: wrap;
+  }
+
+  .price-action-bar.has-estimate-action .price-action-buttons {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .price-action-bar.has-estimate-action .price-action-buttons .button {
+    min-height: 44px;
+    justify-content: center;
   }
 
   .price-action-total > small {

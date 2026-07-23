@@ -23,9 +23,49 @@ def after_migrate() -> None:
 def _apply_setup() -> None:
 	_migrate_paper_rolls_to_item_tracking()
 	_create_fields()
+	_ensure_default_pricing_model()
 	_enable_crm_deal_quotations()
 	_create_crm_form_script()
 	ensure_stock_workspace_link()
+
+
+def _ensure_default_pricing_model() -> None:
+	if not frappe.db.exists("DocType", "Studio Pricing Model"):
+		return
+	settings = frappe.get_single("Studio Pricing Settings")
+	if settings.active_pricing_model:
+		return
+	model_name = "Standard Pricing"
+	if not frappe.db.exists("Studio Pricing Model", model_name):
+		values = {
+			fieldname: settings.get(fieldname)
+			for fieldname in (
+				"hourly_rate",
+				"ink_cost_per_sq_in",
+				"material_markup",
+				"unit_price_rounding",
+				"production_base",
+				"production_first_rate",
+				"production_large_rate",
+				"production_breakpoint_sq_in",
+				"minimum_price_4x6",
+				"minimum_price_5x7",
+				"minimum_price_8x10",
+				"minimum_pricing_margin_pct",
+				"low_margin_threshold_pct",
+				"roll_consumption_increment_ft",
+			)
+		}
+		model = frappe.get_doc(
+			{
+				"doctype": "Studio Pricing Model",
+				"model_name": model_name,
+				"description": "Initial model migrated from Studio Pricing Settings.",
+				**values,
+			}
+		).insert(ignore_permissions=True)
+		model_name = model.name
+	settings.db_set("active_pricing_model", model_name, update_modified=False)
 
 
 def _migrate_paper_rolls_to_item_tracking() -> None:
@@ -203,13 +243,32 @@ def _create_fields() -> None:
 				"insert_after": "si_gross_margin_pct",
 			},
 			{
+				"fieldname": "si_pricing_model",
+				"fieldtype": "Link",
+				"label": "Pricing Model",
+				"options": "Studio Pricing Model",
+				"read_only": 1,
+				"hidden": 1,
+				"print_hide": 1,
+				"insert_after": "si_formula_version",
+			},
+			{
+				"fieldname": "si_pricing_model_revision",
+				"fieldtype": "Int",
+				"label": "Pricing Model Revision",
+				"read_only": 1,
+				"hidden": 1,
+				"print_hide": 1,
+				"insert_after": "si_pricing_model",
+			},
+			{
 				"fieldname": "si_calculation_snapshot",
 				"fieldtype": "Long Text",
 				"label": "Calculation Snapshot",
 				"read_only": 1,
 				"hidden": 1,
 				"print_hide": 1,
-				"insert_after": "si_formula_version",
+				"insert_after": "si_pricing_model_revision",
 			},
 		],
 		"Item Price": [
@@ -246,7 +305,7 @@ def _create_fields() -> None:
 			{
 				"fieldname": "crm_deal",
 				"fieldtype": "Data",
-				"label": "Frappe CRM Deal",
+				"label": "Estimate Request",
 				"read_only": 1,
 				"print_hide": 1,
 				"insert_after": "party_name",
@@ -256,7 +315,7 @@ def _create_fields() -> None:
 			{
 				"fieldname": "crm_deal",
 				"fieldtype": "Data",
-				"label": "Frappe CRM Deal",
+				"label": "Estimate Request",
 				"read_only": 1,
 				"print_hide": 1,
 				"insert_after": "prospect_name",
@@ -331,13 +390,18 @@ def _crm_deal_form_script() -> str:
 			this.actions.push({
 				label: __(\"Price Calculator\"),
 				icon: \"calculator\",
-				onClick: () => window.location.assign(\"/studio-inventory?mode=price\"),
+				onClick: () => {
+					const request = this.doc.__newDocument
+						? \"\"
+						: `&estimate_request=${encodeURIComponent(this.doc.name)}`
+					window.location.assign(`/studio-inventory?mode=price${request}`)
+				},
 			})
 		}
 		if (this.doc.__newDocument) return
-		if (this.actions.some((action) => action.label === __(\"Create Print Quotation\"))) return
+		if (this.actions.some((action) => action.label === __(\"Create Estimate\"))) return
 		this.actions.push({
-			label: __(\"Create Print Quotation\"),
+			label: __(\"Create Estimate\"),
 			icon: \"file-text\",
 			onClick: () => {
 				call(\"studio_inventory.pricing_api.get_quotation_url\", {
@@ -345,7 +409,7 @@ def _crm_deal_form_script() -> str:
 				}).then((url) => {
 					if (url) window.open(url, \"_blank\")
 				}).catch((error) => {
-					toast.error(error.messages?.[0] || __(\"Could not create the quotation.\"))
+					toast.error(error.messages?.[0] || __(\"Could not create the Estimate.\"))
 				})
 			},
 		})

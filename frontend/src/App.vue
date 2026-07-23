@@ -79,6 +79,7 @@ const NAV_ITEMS = [
 
 const options = ref({ warehouses: [], suppliers: [], permissions: {} });
 const activeView = ref("receive");
+const estimateRequest = new URL(window.location.href).searchParams.get("estimate_request") || "";
 const mobileOpen = ref(false);
 const sidebarCollapsed = ref(false);
 const scanInput = ref(null);
@@ -120,7 +121,7 @@ const page = computed(() => {
   if (VIEW_COPY[activeView.value]) return VIEW_COPY[activeView.value];
   if (activeView.value === "activity") return { title: "Activity", action: "Inventory history" };
   if (activeView.value === "commands") return { title: "Command card", action: "Scanner controls" };
-  if (activeView.value === "price") return { title: "Price calculator", action: "No quote required" };
+  if (activeView.value === "price") return { title: "Price calculator", action: "No Estimate required" };
   return { title: "Labels", action: "Inventory labels" };
 });
 
@@ -751,7 +752,7 @@ onMounted(async () => {
       </header>
 
       <main class="main-area">
-        <PriceCalculator v-if="activeView === 'price'" />
+        <PriceCalculator v-if="activeView === 'price'" :estimate-request="estimateRequest" />
 
         <div v-else-if="VIEW_COPY[activeView]" class="scanner-page">
           <form class="scan-zone" @submit.prevent="resolveScan">

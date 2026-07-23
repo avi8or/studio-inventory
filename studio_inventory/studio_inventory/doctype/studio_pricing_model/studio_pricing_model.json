@@ -1,12 +1,15 @@
 {
  "actions": [],
+ "autoname": "field:model_name",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "company",
-  "default_print_item",
-  "paper_cost_price_list",
-  "active_pricing_model",
+  "model_name",
+  "model_revision",
+  "disabled",
+  "effective_from",
+  "effective_to",
+  "description",
   "pricing_section",
   "hourly_rate",
   "ink_cost_per_sq_in",
@@ -24,45 +27,53 @@
   "minimum_pricing_margin_pct",
   "low_margin_threshold_pct",
   "consumption_section",
-  "roll_consumption_increment_ft"
+  "roll_consumption_increment_ft",
+  "rules_section",
+  "rules"
  ],
  "fields": [
   {
-   "fieldname": "company",
-   "fieldtype": "Link",
-   "label": "Company",
-   "options": "Company",
-   "reqd": 1
+   "fieldname": "model_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Model Name",
+   "reqd": 1,
+   "unique": 1
   },
   {
-   "description": "A non-stock sellable Item used for calculated custom-print quotation lines.",
-   "fieldname": "default_print_item",
-   "fieldtype": "Link",
-   "label": "Default Print Item",
-   "options": "Item"
+   "default": "1",
+   "fieldname": "model_revision",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Revision",
+   "read_only": 1
   },
   {
-   "default": "Standard Buying",
-   "description": "Valid Item Prices in this Buying Price List are normalized to a paper cost per square inch.",
-   "fieldname": "paper_cost_price_list",
-   "fieldtype": "Link",
-   "label": "Paper Cost Price List",
-   "options": "Price List",
-   "reqd": 1
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Disabled"
   },
   {
-   "description": "Calculations use this model. The fields below remain as a migration fallback until a model is selected.",
-   "fieldname": "active_pricing_model",
-   "fieldtype": "Link",
-   "label": "Active Pricing Model",
-   "options": "Studio Pricing Model"
+   "fieldname": "effective_from",
+   "fieldtype": "Date",
+   "label": "Effective From"
   },
   {
-   "collapsible": 1,
-   "description": "Used only when no active pricing model is selected.",
+   "fieldname": "effective_to",
+   "fieldtype": "Date",
+   "label": "Effective To"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
    "fieldname": "pricing_section",
    "fieldtype": "Section Break",
-   "label": "Legacy Pricing Fallback"
+   "label": "Base Pricing"
   },
   {
    "default": "75",
@@ -167,21 +178,35 @@
    "fieldname": "roll_consumption_increment_ft",
    "fieldtype": "Float",
    "label": "Roll Length Increment (ft)"
+  },
+  {
+   "fieldname": "rules_section",
+   "fieldtype": "Section Break",
+   "label": "Conditional Rules"
+  },
+  {
+   "fieldname": "rules",
+   "fieldtype": "Table",
+   "label": "Rules and Overrides",
+   "options": "Studio Pricing Rule"
   }
  ],
  "index_web_pages_for_search": 1,
- "issingle": 1,
  "links": [],
  "module": "Studio Inventory",
- "name": "Studio Pricing Settings",
+ "name": "Studio Pricing Model",
+ "naming_rule": "By fieldname",
  "permissions": [
   {
    "create": 1,
+   "delete": 1,
    "read": 1,
    "role": "System Manager",
    "write": 1
   },
   {
+   "create": 1,
+   "delete": 1,
    "read": 1,
    "role": "Sales Manager",
    "write": 1
@@ -191,7 +216,10 @@
    "role": "Sales User"
   }
  ],
+ "search_fields": "model_name,description",
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "title_field": "model_name",
+ "track_changes": 1
 }

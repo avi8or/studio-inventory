@@ -4,12 +4,12 @@ import math
 import re
 from dataclasses import asdict, dataclass
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Mapping
+from typing import Mapping, Sequence
 
 from studio_inventory.domain import DomainError
 
 
-FORMULA_VERSION = "1"
+FORMULA_VERSION = "2"
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,7 @@ class PricingRules:
 	minimum_price_4x6: float = 4
 	minimum_price_5x7: float = 6
 	minimum_price_8x10: float = 8
+	minimum_pricing_margin_pct: float = 0
 	unit_price_rounding: float = 1
 	low_margin_threshold_pct: float = 35
 	roll_consumption_increment_ft: float = 1
@@ -43,7 +44,18 @@ class PricingRules:
 			raise DomainError("Unit price rounding must be greater than zero.")
 		if parsed["roll_consumption_increment_ft"] <= 0:
 			raise DomainError("Roll consumption increment must be greater than zero.")
+		if parsed["minimum_pricing_margin_pct"] >= 100:
+			raise DomainError("Minimum pricing margin must be less than 100 percent.")
 		return cls(**parsed)
+
+
+@dataclass(frozen=True)
+class PriceAdjustment:
+	rule_name: str
+	priority: int
+	target: str
+	operation: str
+	value: float
 
 
 @dataclass(frozen=True)
@@ -72,9 +84,11 @@ class PrintCalculation:
 	material_area_sq_in: float
 	production_allowance: float
 	minimum_unit_price: float
+	margin_floor_unit_price: float
 	list_unit_price: float
 	line_total: float
 	unit_paper_cost: float
+	actual_unit_paper_cost: float
 	unit_ink_cost: float
 	paper_cost: float
 	ink_cost: float
@@ -151,10 +165,25 @@ def cost_per_sq_in(
 	return rate / conversion / stock_area_sq_in(dimensions)
 
 
+def consumed_paper_cost(
+	*,
+	dimensions: PaperDimensions,
+	consumption_quantity: object,
+	paper_cost_per_sq_in: object,
+) -> float:
+	quantity = _finite_number("Paper consumption", consumption_quantity, minimum=0)
+	rate = _finite_number("Paper cost per square inch", paper_cost_per_sq_in, minimum=0)
+	return quantity * stock_area_sq_in(dimensions) * rate
+
+
 def _round_to_step(value: float, step: float) -> float:
 	decimal_value = Decimal(str(value))
 	decimal_step = Decimal(str(step))
 	return float((decimal_value / decimal_step).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * decimal_step)
+
+
+def _round_up_to_step(value: float, step: float) -> float:
+	return math.ceil((value - 1e-12) / step) * step
 
 
 def _production_allowance(printed_area: float, rules: PricingRules) -> float:
@@ -178,6 +207,31 @@ def _minimum_price(width: float, height: float, rules: PricingRules) -> float:
 	return 0
 
 
+def _apply_adjustment(current: float, adjustment: PriceAdjustment) -> float:
+	if adjustment.operation == "set":
+		value = adjustment.value
+	elif adjustment.operation == "add":
+		value = current + adjustment.value
+	elif adjustment.operation == "multiply":
+		value = current * adjustment.value
+	else:
+		raise DomainError(f"Pricing rule {adjustment.rule_name} has an unsupported operation.")
+	if value < 0:
+		raise DomainError(f"Pricing rule {adjustment.rule_name} produces a negative price.")
+	return value
+
+
+def _adjust_price(
+	value: float,
+	target: str,
+	adjustments: Sequence[PriceAdjustment],
+) -> float:
+	for adjustment in adjustments:
+		if adjustment.target == target:
+			value = _apply_adjustment(value, adjustment)
+	return value
+
+
 def calculate_print(
 	*,
 	artwork_width_in: object,
@@ -188,6 +242,8 @@ def calculate_print(
 	ink_cost_per_sq_in: object,
 	paper_cost_per_sq_in: object,
 	rules: PricingRules | None = None,
+	price_adjustments: Sequence[PriceAdjustment] = (),
+	actual_paper_cost: object | None = None,
 ) -> PrintCalculation:
 	rules = rules or PricingRules()
 	width = _finite_number("Artwork width", artwork_width_in, minimum=0.000001)
@@ -207,13 +263,42 @@ def calculate_print(
 	unit_paper_cost = material_area * paper_rate
 	unit_ink_cost = printed_area * ink_rate
 	production = _production_allowance(printed_area, rules)
-	minimum_price = _minimum_price(width, height, rules)
-	raw_price = production + rules.material_markup * (unit_paper_cost + unit_ink_cost)
-	unit_price = _round_to_step(max(raw_price, minimum_price), rules.unit_price_rounding)
-	line_total = unit_price * int(qty)
-	paper_cost = unit_paper_cost * int(qty)
+	paper_cost = (
+		unit_paper_cost * int(qty)
+		if actual_paper_cost is None
+		else _finite_number("Actual paper cost", actual_paper_cost, minimum=0)
+	)
+	actual_unit_paper_cost = paper_cost / int(qty)
 	ink_cost = unit_ink_cost * int(qty)
 	time_cost = time * rules.hourly_rate / 60
+	pricing_unit_cost = unit_paper_cost + unit_ink_cost + time_cost / int(qty)
+	margin_floor_price = (
+		pricing_unit_cost / (1 - rules.minimum_pricing_margin_pct / 100)
+		if rules.minimum_pricing_margin_pct
+		else 0
+	)
+	minimum_price = _adjust_price(
+		_minimum_price(width, height, rules),
+		"minimum_unit_price",
+		price_adjustments,
+	)
+	raw_price = _adjust_price(
+		production + rules.material_markup * (unit_paper_cost + unit_ink_cost),
+		"raw_unit_price",
+		price_adjustments,
+	)
+	final_price = _adjust_price(
+		max(raw_price, minimum_price, margin_floor_price),
+		"final_unit_price",
+		price_adjustments,
+	)
+	unit_price = _round_to_step(final_price, rules.unit_price_rounding)
+	if (
+		not any(adjustment.target == "final_unit_price" for adjustment in price_adjustments)
+		and unit_price < margin_floor_price
+	):
+		unit_price = _round_up_to_step(margin_floor_price, rules.unit_price_rounding)
+	line_total = unit_price * int(qty)
 	total_cost = paper_cost + ink_cost + time_cost
 	gross_profit = line_total - total_cost
 	margin = gross_profit / line_total * 100 if line_total else 0
@@ -227,9 +312,11 @@ def calculate_print(
 		material_area_sq_in=material_area,
 		production_allowance=production,
 		minimum_unit_price=minimum_price,
+		margin_floor_unit_price=margin_floor_price,
 		list_unit_price=unit_price,
 		line_total=line_total,
 		unit_paper_cost=unit_paper_cost,
+		actual_unit_paper_cost=actual_unit_paper_cost,
 		unit_ink_cost=unit_ink_cost,
 		paper_cost=paper_cost,
 		ink_cost=ink_cost,

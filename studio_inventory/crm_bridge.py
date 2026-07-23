@@ -50,7 +50,12 @@ def _create_customer(crm_deal: str) -> str:
 		customer_name = primary_contact.full_name if primary_contact else deal.lead_name
 		customer_type = "Individual"
 	if not customer_name:
-		frappe.throw(_("The CRM Deal needs an Organization or primary Contact before creating a Sales Order."))
+		frappe.throw(
+			_(
+				"The Estimate Request needs an Organization or primary Contact "
+				"before creating a Client Order."
+			)
+		)
 
 	values = {
 		"doctype": "Customer",

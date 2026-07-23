@@ -1,6 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import getdate, nowdate
 
 from studio_inventory.domain import DomainError
 from studio_inventory.pricing import PricingRules
@@ -32,3 +33,18 @@ class StudioPricingSettings(Document):
 			"Price List", self.paper_cost_price_list, "buying"
 		):
 			frappe.throw(_("Paper Cost Price List must be a Buying Price List."))
+
+		if self.active_pricing_model:
+			model = frappe.db.get_value(
+				"Studio Pricing Model",
+				self.active_pricing_model,
+				["disabled", "effective_from", "effective_to"],
+				as_dict=True,
+			)
+			if not model or model.disabled:
+				frappe.throw(_("Active Pricing Model must be an enabled pricing model."))
+			today = getdate(nowdate())
+			if model.effective_from and getdate(model.effective_from) > today:
+				frappe.throw(_("Active Pricing Model is not effective yet."))
+			if model.effective_to and getdate(model.effective_to) < today:
+				frappe.throw(_("Active Pricing Model has expired."))

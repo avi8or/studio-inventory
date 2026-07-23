@@ -8,12 +8,17 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  FilePlus2,
   Info,
   RefreshCw,
   Search,
   X,
 } from "@lucide/vue";
 import { buildPaperSearchIndex, searchPaperOptions } from "./paperSearch.js";
+
+const props = defineProps({
+  estimateRequest: { type: String, default: "" },
+});
 
 const RECENT_PAPER_KEY = "studio-inventory:recent-paper-items";
 const RECENT_PAPER_LIMIT = 5;
@@ -30,6 +35,7 @@ const result = ref(null);
 const loading = ref(true);
 const loadingPaper = ref(false);
 const calculating = ref(false);
+const creatingEstimate = ref(false);
 const error = ref("");
 const paperQuery = ref("");
 const paperPicker = ref(null);
@@ -337,6 +343,23 @@ async function calculate() {
   }
 }
 
+async function createEstimate() {
+  if (!result.value || !props.estimateRequest || !validateForm()) return;
+  creatingEstimate.value = true;
+  error.value = "";
+  try {
+    const estimate = await callPricing("create_estimate", {
+      payload: calculationPayload(),
+      crm_deal: props.estimateRequest,
+    });
+    window.location.assign(estimate.url);
+  } catch (value) {
+    error.value = apiError(value);
+  } finally {
+    creatingEstimate.value = false;
+  }
+}
+
 function reset() {
   result.value = null;
   resultStale.value = false;
@@ -380,12 +403,16 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
   <div class="price-page">
     <div class="filter-row price-heading">
       <div class="page-description">
-        <strong>Standalone print pricing</strong>
-        <span>Explore a price without creating a Deal, Quotation, or inventory transaction.</span>
+        <strong>{{ props.estimateRequest ? "Estimate pricing" : "Standalone print pricing" }}</strong>
+        <span v-if="props.estimateRequest">Calculate for Estimate Request {{ props.estimateRequest }} and start an Estimate when ready.</span>
+        <span v-else>Explore a price without creating an Inquiry, Estimate Request, Estimate, or inventory transaction.</span>
       </div>
-      <button class="button subtle price-reset" type="button" :disabled="loading" @click="reset">
-        <RefreshCw :size="14" /> Reset
-      </button>
+      <div class="price-heading-actions">
+        <a v-if="context?.can_manage_pricing" class="button subtle" href="/app/studio-pricing-model">Manage pricing</a>
+        <button class="button subtle price-reset" type="button" :disabled="loading" @click="reset">
+          <RefreshCw :size="14" /> Reset
+        </button>
+      </div>
     </div>
 
     <div v-if="loading" class="price-loading">Loading pricing settings…</div>
@@ -538,6 +565,8 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
           </section>
           <section class="price-result-section">
             <h3>Internal economics</h3>
+            <div v-if="result.pricing_model"><span>Pricing model</span><strong>{{ result.pricing_model.name }} · r{{ result.pricing_model.revision }}</strong></div>
+            <div v-if="result.matched_rules?.length"><span>Matched rules</span><strong>{{ result.matched_rules.map((rule) => rule.rule_name).join(", ") }}</strong></div>
             <div><span>Total cost</span><strong>{{ money(result.calculation.total_cost) }}</strong></div>
             <div><span>Gross profit</span><strong>{{ money(result.calculation.gross_profit) }}</strong></div>
             <div><span>Gross margin</span><strong>{{ number(result.calculation.gross_margin_pct, 1) }}%</strong></div>
@@ -548,7 +577,11 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
       </aside>
     </div>
     <button v-if="resultBreakdownOpen" class="price-results-scrim" type="button" aria-label="Close price breakdown" @click="resultBreakdownOpen = false"></button>
-    <div v-if="context" class="price-action-bar">
+    <div
+      v-if="context"
+      class="price-action-bar"
+      :class="{ 'has-estimate-action': props.estimateRequest && result && !resultStale }"
+    >
       <div class="price-action-total" aria-live="polite">
         <span>{{ validationErrorCount ? "Needs attention" : resultStale ? "Price" : "Line total" }}</span>
         <strong v-if="validationErrorCount">{{ validationErrorCount }} {{ validationErrorCount === 1 ? "field" : "fields" }}</strong>
@@ -558,9 +591,20 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
         <small v-else-if="result"><template v-if="Number(result.calculation.quantity) > 1">{{ printCount(result.calculation.quantity) }} · {{ money(result.calculation.list_unit_price) }} per print</template><template v-else>{{ printCount(result.calculation.quantity) }}</template> <button class="price-breakdown-link" type="button" @click="resultBreakdownOpen = true">View breakdown <ChevronUp :size="13" /></button></small>
         <small v-else>Nothing is saved by this calculator.</small>
       </div>
-      <button class="button primary price-calculate" type="submit" form="price-calculator-form" :disabled="calculating || loadingPaper">
-        <Calculator :size="15" /> {{ calculating ? "Calculating…" : resultStale ? "Recalculate" : "Calculate price" }}
-      </button>
+      <div class="price-action-buttons">
+        <button class="button primary price-calculate" type="submit" form="price-calculator-form" :disabled="calculating || loadingPaper">
+          <Calculator :size="15" /> {{ calculating ? "Calculating…" : resultStale ? "Recalculate" : "Calculate price" }}
+        </button>
+        <button
+          v-if="props.estimateRequest && result && !resultStale"
+          class="button primary"
+          type="button"
+          :disabled="creatingEstimate || calculating"
+          @click="createEstimate"
+        >
+          <FilePlus2 :size="15" /> {{ creatingEstimate ? "Starting Estimate…" : "Start Estimate" }}
+        </button>
+      </div>
     </div>
   </div>
 </template>

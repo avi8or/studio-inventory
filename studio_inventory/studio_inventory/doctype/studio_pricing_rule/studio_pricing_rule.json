@@ -1,0 +1,156 @@
+{
+ "actions": [],
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "rule_name",
+  "priority",
+  "conditions_section",
+  "paper_item",
+  "paper_brand",
+  "stock_uom",
+  "exact_width_in",
+  "exact_height_in",
+  "min_artwork_area_sq_in",
+  "max_artwork_area_sq_in",
+  "min_paper_cost_per_sq_in",
+  "max_paper_cost_per_sq_in",
+  "min_quantity",
+  "max_quantity",
+  "action_section",
+  "target",
+  "operation",
+  "value"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "rule_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Rule Name",
+   "reqd": 1
+  },
+  {
+   "default": "100",
+   "description": "Lower priorities run first. Rules changing the same target must use different priorities.",
+   "fieldname": "priority",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Priority",
+   "reqd": 1
+  },
+  {
+   "fieldname": "conditions_section",
+   "fieldtype": "Section Break",
+   "label": "Match Conditions"
+  },
+  {
+   "fieldname": "paper_item",
+   "fieldtype": "Link",
+   "label": "Paper Item",
+   "options": "Item"
+  },
+  {
+   "fieldname": "paper_brand",
+   "fieldtype": "Link",
+   "label": "Paper Brand",
+   "options": "Brand"
+  },
+  {
+   "fieldname": "stock_uom",
+   "fieldtype": "Select",
+   "label": "Paper Form",
+   "options": "\nSheet\nFoot"
+  },
+  {
+   "description": "Enter both dimensions. Matching is orientation-independent.",
+   "fieldname": "exact_width_in",
+   "fieldtype": "Float",
+   "label": "Exact Artwork Width (in)"
+  },
+  {
+   "description": "Enter both dimensions. Matching is orientation-independent.",
+   "fieldname": "exact_height_in",
+   "fieldtype": "Float",
+   "label": "Exact Artwork Height (in)"
+  },
+  {
+   "fieldname": "min_artwork_area_sq_in",
+   "fieldtype": "Float",
+   "label": "Minimum Artwork Area (sq in)"
+  },
+  {
+   "fieldname": "max_artwork_area_sq_in",
+   "fieldtype": "Float",
+   "label": "Maximum Artwork Area (sq in)"
+  },
+  {
+   "fieldname": "min_paper_cost_per_sq_in",
+   "fieldtype": "Currency",
+   "label": "Minimum Paper Cost / sq in",
+   "precision": "6"
+  },
+  {
+   "fieldname": "max_paper_cost_per_sq_in",
+   "fieldtype": "Currency",
+   "label": "Maximum Paper Cost / sq in",
+   "precision": "6"
+  },
+  {
+   "fieldname": "min_quantity",
+   "fieldtype": "Int",
+   "label": "Minimum Quantity"
+  },
+  {
+   "fieldname": "max_quantity",
+   "fieldtype": "Int",
+   "label": "Maximum Quantity"
+  },
+  {
+   "fieldname": "action_section",
+   "fieldtype": "Section Break",
+   "label": "Adjustment"
+  },
+  {
+   "fieldname": "target",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Target",
+   "options": "Internal Hourly Cost\nInk Cost per Square Inch\nMaterial Markup Multiplier\nUnit Price Rounding\nProduction Base Allowance\nFirst-Tier Rate per Square Inch\nLarge-Print Rate per Square Inch\nLarge-Print Breakpoint\nMinimum 4 × 6 Price\nMinimum 5 × 7 Price\nMinimum 8 × 10 Price\nMinimum Pricing Margin\nLow-Margin Warning Threshold\nRoll Consumption Increment\nMinimum Unit Price\nRaw Unit Price\nFinal Unit Price",
+   "reqd": 1
+  },
+  {
+   "fieldname": "operation",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Operation",
+   "options": "Set\nAdd\nMultiply",
+   "reqd": 1
+  },
+  {
+   "fieldname": "value",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Value",
+   "precision": "6",
+   "reqd": 1
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "module": "Studio Inventory",
+ "name": "Studio Pricing Rule",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

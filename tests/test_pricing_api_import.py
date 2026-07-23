@@ -120,6 +120,73 @@ class PricingApiAccessTests(unittest.TestCase):
 
 		self.assertEqual(basis["last_verified_on"], "2026-07-20")
 
+	def test_existing_calculation_snapshot_freezes_its_model_values(self):
+		module, _frappe = self.load_module()
+		row = types.SimpleNamespace(si_paper_cost_per_sq_in=0.01)
+		snapshot = {
+			"rules": {
+				"material_markup": 3,
+			},
+			"price_adjustments": [
+				{
+					"rule_name": "Stored floor",
+					"priority": 10,
+					"target": "minimum_unit_price",
+					"operation": "set",
+					"value": 20,
+				}
+			],
+			"matched_rules": [{"rule_name": "Stored floor"}],
+		}
+		module._active_pricing_model = lambda _settings: self.fail("active model should not be loaded")
+
+		resolution = module._row_pricing_resolution(
+			row,
+			types.SimpleNamespace(),
+			types.SimpleNamespace(),
+			snapshot,
+		)
+
+		self.assertEqual(resolution.rules.material_markup, 3)
+		self.assertEqual(resolution.price_adjustments[0].value, 20)
+		self.assertEqual(resolution.matched_rules[0]["rule_name"], "Stored floor")
+
+	def test_create_estimate_builds_a_native_quotation_with_the_calculated_item(self):
+		module, frappe = self.load_module()
+		captured = {}
+
+		class Quotation:
+			name = "QTN-0001"
+
+			def insert(self):
+				captured["inserted"] = True
+				return self
+
+			def get_url(self):
+				return "/app/quotation/QTN-0001"
+
+		frappe.has_permission = lambda doctype, *, ptype: doctype == "Quotation" and ptype == "create"
+		frappe.get_doc = lambda values: captured.update({"values": values}) or Quotation()
+		module._check_pricing_permission = lambda: None
+		module._payload = lambda payload: payload
+		module._calculation_payload = lambda payload: {"calculation": payload}
+		module._deal_quote_context = lambda crm_deal: {
+			"quotation_to": "CRM Deal",
+			"party_name": crm_deal,
+		}
+		module._calculated_estimate_item = lambda result: {
+			"item_code": "PRINT-SERVICE",
+			"rate": result["calculation"]["price"],
+		}
+
+		created = module.create_estimate({"price": 20}, "CRM-DEAL-0001")
+
+		self.assertTrue(captured["inserted"])
+		self.assertEqual(captured["values"]["doctype"], "Quotation")
+		self.assertEqual(captured["values"]["party_name"], "CRM-DEAL-0001")
+		self.assertEqual(captured["values"]["items"][0]["rate"], 20)
+		self.assertEqual(created, {"name": "QTN-0001", "url": "/app/quotation/QTN-0001"})
+
 
 if __name__ == "__main__":
 	unittest.main()

@@ -14,11 +14,18 @@ from studio_inventory.permissions import has_pricing_access
 from studio_inventory.pricing import (
 	FORMULA_VERSION,
 	PaperDimensions,
+	PriceAdjustment,
 	PricingRules,
 	calculate_print as calculate_print_price,
+	consumed_paper_cost,
 	cost_per_sq_in,
 	estimate_consumption,
 	parse_paper_dimensions,
+)
+from studio_inventory.pricing_model import (
+	PricingResolution,
+	PricingRuleContext,
+	resolve_pricing_model,
 )
 
 
@@ -47,6 +54,22 @@ def _pricing_settings():
 	return frappe.get_cached_doc("Studio Pricing Settings")
 
 
+def _active_pricing_model(settings=None):
+	settings = settings or _pricing_settings()
+	model_name = getattr(settings, "active_pricing_model", None)
+	if not model_name:
+		return None
+	model = frappe.get_cached_doc("Studio Pricing Model", model_name)
+	if model.disabled:
+		frappe.throw(_("The active pricing model is disabled."), frappe.ValidationError)
+	today = getdate(nowdate())
+	if model.effective_from and getdate(model.effective_from) > today:
+		frappe.throw(_("The active pricing model is not effective yet."), frappe.ValidationError)
+	if model.effective_to and getdate(model.effective_to) < today:
+		frappe.throw(_("The active pricing model has expired."), frappe.ValidationError)
+	return model
+
+
 def _company(settings=None) -> str | None:
 	settings = settings or _pricing_settings()
 	return (
@@ -61,14 +84,47 @@ def _paper_cost_price_list(settings=None) -> str:
 	return settings.paper_cost_price_list or "Standard Buying"
 
 
-def _rules(settings=None) -> PricingRules:
+def _rules(settings=None, model=None) -> PricingRules:
 	settings = settings or _pricing_settings()
+	source = model or _active_pricing_model(settings) or settings
 	return PricingRules.from_mapping(
 		{
-			name: settings.get(name)
+			name: source.get(name)
 			for name in PricingRules.__dataclass_fields__
 		}
 	)
+
+
+def _pricing_resolution(
+	*,
+	settings,
+	model,
+	paper_item,
+	paper_cost_per_sq_in: float,
+	data: dict[str, Any],
+) -> PricingResolution:
+	base_rules = _rules(settings, model) if model else _rules(settings)
+	if not model:
+		return PricingResolution(rules=base_rules, price_adjustments=(), matched_rules=())
+	context = PricingRuleContext(
+		paper_item=paper_item.name,
+		paper_brand=paper_item.brand,
+		stock_uom=paper_item.stock_uom,
+		artwork_width_in=flt(data.get("artwork_width_in")),
+		artwork_height_in=flt(data.get("artwork_height_in")),
+		paper_cost_per_sq_in=paper_cost_per_sq_in,
+		quantity=cint(data.get("quantity") or 1),
+	)
+	return resolve_pricing_model(base_rules, model.rules, context)
+
+
+def _model_snapshot(model) -> dict[str, Any] | None:
+	if not model:
+		return None
+	return {
+		"name": model.name,
+		"revision": cint(model.model_revision),
+	}
 
 
 def _paper_item(item_code: str):
@@ -90,7 +146,7 @@ def _print_item(item_code: str):
 	item.check_permission("read")
 	if item.disabled or not item.is_sales_item or item.has_variants:
 		frappe.throw(
-			_("Choose an active, sellable Item without variants for the quotation line."),
+			_("Choose an active, sellable Item without variants for the Estimate line."),
 			frappe.ValidationError,
 		)
 	return item
@@ -207,7 +263,7 @@ def _paper_options() -> list[dict[str, Any]]:
 
 def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, Any]:
 	settings = settings or _pricing_settings()
-	rules = _rules(settings)
+	model = _active_pricing_model(settings)
 	print_item = _print_item(str(data.get("print_item") or settings.default_print_item or ""))
 	paper_item = _paper_item(str(data.get("paper_item") or ""))
 	dimensions = _item_dimensions(paper_item)
@@ -237,9 +293,31 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 		cost_source = {"cost_per_sq_in": paper_cost, "override": True}
 		cost_was_overridden = True
 
+	resolution = _pricing_resolution(
+		settings=settings,
+		model=model,
+		paper_item=paper_item,
+		paper_cost_per_sq_in=paper_cost,
+		data=data,
+	)
+	rules = resolution.rules
 	ink_cost = data.get("ink_cost_per_sq_in")
 	if ink_cost in (None, ""):
 		ink_cost = rules.ink_cost_per_sq_in
+	finished_width = flt(data.get("artwork_width_in")) + flt(data.get("border_in")) * 2
+	finished_height = flt(data.get("artwork_height_in")) + flt(data.get("border_in")) * 2
+	consumption = estimate_consumption(
+		dimensions=dimensions,
+		finished_width_in=finished_width,
+		finished_height_in=finished_height,
+		quantity=data.get("quantity", 1),
+		roll_increment_ft=rules.roll_consumption_increment_ft,
+	)
+	actual_paper_cost = consumed_paper_cost(
+		dimensions=dimensions,
+		consumption_quantity=consumption.quantity,
+		paper_cost_per_sq_in=paper_cost,
+	)
 	calculation = calculate_print_price(
 		artwork_width_in=data.get("artwork_width_in"),
 		artwork_height_in=data.get("artwork_height_in"),
@@ -249,13 +327,8 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 		ink_cost_per_sq_in=ink_cost,
 		paper_cost_per_sq_in=paper_cost,
 		rules=rules,
-	)
-	consumption = estimate_consumption(
-		dimensions=dimensions,
-		finished_width_in=calculation.finished_width_in,
-		finished_height_in=calculation.finished_height_in,
-		quantity=calculation.quantity,
-		roll_increment_ft=rules.roll_consumption_increment_ft,
+		price_adjustments=resolution.price_adjustments,
+		actual_paper_cost=actual_paper_cost,
 	)
 	warnings = []
 	if calculation.gross_margin_pct < rules.low_margin_threshold_pct:
@@ -275,6 +348,7 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 	)
 	snapshot = {
 		"formula_version": FORMULA_VERSION,
+		"pricing_model": _model_snapshot(model),
 		"inputs": {
 			"print_item": print_item.name,
 			"paper_item": paper_item.name,
@@ -287,6 +361,11 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 			"paper_cost_per_sq_in": paper_cost,
 		},
 		"rules": asdict(rules),
+		"price_adjustments": [
+			asdict(adjustment)
+			for adjustment in resolution.price_adjustments
+		],
+		"matched_rules": list(resolution.matched_rules),
 		"cost_source": cost_source,
 		"calculation": asdict(calculation),
 		"consumption": asdict(consumption),
@@ -300,6 +379,8 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 			"dimensions": asdict(dimensions),
 		},
 		"paper_cost_per_sq_in": paper_cost,
+		"pricing_model": _model_snapshot(model),
+		"matched_rules": list(resolution.matched_rules),
 		"cost_source": cost_source,
 		"cost_was_overridden": cost_was_overridden,
 		"calculation": asdict(calculation),
@@ -314,16 +395,19 @@ def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, An
 def get_pricing_context(include_paper_items: bool = False) -> dict:
 	_check_pricing_permission()
 	settings = _pricing_settings()
-	rules = _rules(settings)
+	model = _active_pricing_model(settings)
+	rules = _rules(settings, model) if model else _rules(settings)
 	company = _company(settings)
 	context = {
 		"company": company,
 		"currency": frappe.db.get_value("Company", company, "default_currency") if company else None,
 		"default_print_item": settings.default_print_item,
 		"paper_cost_price_list": _paper_cost_price_list(settings),
+		"active_pricing_model": _model_snapshot(model),
 		"ink_cost_per_sq_in": rules.ink_cost_per_sq_in,
 		"low_margin_threshold_pct": rules.low_margin_threshold_pct,
 		"can_override_cost": _can_override_cost(),
+		"can_manage_pricing": bool(PRICING_MANAGER_ROLES.intersection(frappe.get_roles())),
 	}
 	if cint(include_paper_items):
 		context["paper_items"] = _paper_options()
@@ -359,9 +443,56 @@ def calculate_print(payload: dict | str) -> dict:
 		raise
 
 
+def _stored_snapshot(row) -> dict[str, Any]:
+	value = row.get("si_calculation_snapshot")
+	if not value:
+		return {}
+	try:
+		snapshot = json.loads(value)
+	except (TypeError, ValueError):
+		frappe.throw(_("The stored print calculation snapshot is not valid JSON."), frappe.ValidationError)
+		return {}
+	if not isinstance(snapshot, dict):
+		frappe.throw(_("The stored print calculation snapshot must be an object."), frappe.ValidationError)
+	return snapshot
+
+
+def _stored_price_adjustments(snapshot: dict[str, Any]) -> tuple[PriceAdjustment, ...]:
+	return tuple(
+		PriceAdjustment(
+			rule_name=str(adjustment.get("rule_name") or "Stored pricing rule"),
+			priority=cint(adjustment.get("priority")),
+			target=str(adjustment.get("target") or ""),
+			operation=str(adjustment.get("operation") or ""),
+			value=flt(adjustment.get("value")),
+		)
+		for adjustment in snapshot.get("price_adjustments") or []
+	)
+
+
+def _row_pricing_resolution(row, paper_item, settings, snapshot) -> PricingResolution:
+	if snapshot.get("rules"):
+		return PricingResolution(
+			rules=PricingRules.from_mapping(snapshot["rules"]),
+			price_adjustments=_stored_price_adjustments(snapshot),
+			matched_rules=tuple(snapshot.get("matched_rules") or ()),
+		)
+	model = _active_pricing_model(settings)
+	return _pricing_resolution(
+		settings=settings,
+		model=model,
+		paper_item=paper_item,
+		paper_cost_per_sq_in=flt(row.si_paper_cost_per_sq_in),
+		data={
+			"artwork_width_in": row.si_artwork_width_in,
+			"artwork_height_in": row.si_artwork_height_in,
+			"quantity": row.qty,
+		},
+	)
+
+
 def validate_quotation(doc, method: str | None = None) -> None:
 	settings = _pricing_settings()
-	rules = _rules(settings)
 	changed = False
 	for row in doc.items:
 		if not row.get("si_is_calculated_print"):
@@ -369,6 +500,23 @@ def validate_quotation(doc, method: str | None = None) -> None:
 		try:
 			paper_item = _paper_item(row.si_paper_item)
 			dimensions = _item_dimensions(paper_item)
+			snapshot = _stored_snapshot(row)
+			resolution = _row_pricing_resolution(row, paper_item, settings, snapshot)
+			rules = resolution.rules
+			finished_width = flt(row.si_artwork_width_in) + flt(row.si_border_in) * 2
+			finished_height = flt(row.si_artwork_height_in) + flt(row.si_border_in) * 2
+			consumption = estimate_consumption(
+				dimensions=dimensions,
+				finished_width_in=finished_width,
+				finished_height_in=finished_height,
+				quantity=row.qty,
+				roll_increment_ft=rules.roll_consumption_increment_ft,
+			)
+			actual_paper_cost = consumed_paper_cost(
+				dimensions=dimensions,
+				consumption_quantity=consumption.quantity,
+				paper_cost_per_sq_in=row.si_paper_cost_per_sq_in,
+			)
 			calculation = calculate_print_price(
 				artwork_width_in=row.si_artwork_width_in,
 				artwork_height_in=row.si_artwork_height_in,
@@ -378,13 +526,8 @@ def validate_quotation(doc, method: str | None = None) -> None:
 				ink_cost_per_sq_in=row.si_ink_cost_per_sq_in,
 				paper_cost_per_sq_in=row.si_paper_cost_per_sq_in,
 				rules=rules,
-			)
-			consumption = estimate_consumption(
-				dimensions=dimensions,
-				finished_width_in=calculation.finished_width_in,
-				finished_height_in=calculation.finished_height_in,
-				quantity=calculation.quantity,
-				roll_increment_ft=rules.roll_consumption_increment_ft,
+				price_adjustments=resolution.price_adjustments,
+				actual_paper_cost=actual_paper_cost,
 			)
 		except DomainError as error:
 			_throw_domain(error)
@@ -410,15 +553,31 @@ def validate_quotation(doc, method: str | None = None) -> None:
 		row.si_internal_cost = calculation.total_cost
 		row.si_gross_margin_pct = margin
 		row.si_formula_version = FORMULA_VERSION
-		row.si_calculation_snapshot = json.dumps(
+		model_snapshot = snapshot.get("pricing_model")
+		if not snapshot.get("rules"):
+			model_snapshot = _model_snapshot(_active_pricing_model(settings))
+		snapshot.update(
 			{
 				"formula_version": FORMULA_VERSION,
+				"pricing_model": model_snapshot,
 				"rules": asdict(rules),
+				"price_adjustments": [
+					asdict(adjustment)
+					for adjustment in resolution.price_adjustments
+				],
+				"matched_rules": list(resolution.matched_rules),
 				"calculation": asdict(calculation),
 				"consumption": asdict(consumption),
 				"net_unit_rate": net_rate,
 				"gross_margin_after_line_discount_pct": margin,
-			},
+			}
+		)
+		if snapshot.get("inputs"):
+			snapshot["inputs"]["quantity"] = calculation.quantity
+		row.si_pricing_model = model_snapshot.get("name") if model_snapshot else None
+		row.si_pricing_model_revision = model_snapshot.get("revision") if model_snapshot else None
+		row.si_calculation_snapshot = json.dumps(
+			snapshot,
 			sort_keys=True,
 			separators=(",", ":"),
 		)
@@ -427,8 +586,7 @@ def validate_quotation(doc, method: str | None = None) -> None:
 		doc.calculate_taxes_and_totals()
 
 
-@frappe.whitelist(methods=["POST"])
-def get_quotation_url(crm_deal: str) -> str:
+def _deal_quote_context(crm_deal: str) -> dict[str, Any]:
 	if not frappe.db.exists("DocType", "CRM Deal"):
 		frappe.throw(_("Frappe CRM is not installed on this site."), frappe.ValidationError)
 	deal = frappe.get_doc("CRM Deal", crm_deal)
@@ -440,7 +598,7 @@ def get_quotation_url(crm_deal: str) -> str:
 		if deal.organization
 		else None
 	)
-	params = {
+	return {
 		"quotation_to": "CRM Deal",
 		"crm_deal": deal.name,
 		"party_name": deal.name,
@@ -448,5 +606,71 @@ def get_quotation_url(crm_deal: str) -> str:
 		"contact_person": contact,
 		"customer_address": address,
 	}
+
+
+def _calculated_estimate_item(result: dict[str, Any]) -> dict[str, Any]:
+	snapshot = json.loads(result["snapshot"])
+	inputs = snapshot["inputs"]
+	calculation = result["calculation"]
+	consumption = result["consumption"]
+	model = result.get("pricing_model")
+	return {
+		"item_code": result["print_item"]["item_code"],
+		"qty": calculation["quantity"],
+		"description": result["description"],
+		"price_list_rate": calculation["list_unit_price"],
+		"rate": calculation["list_unit_price"],
+		"si_is_calculated_print": 1,
+		"si_paper_item": result["paper_item"]["item_code"],
+		"si_artwork_width_in": inputs["artwork_width_in"],
+		"si_artwork_height_in": inputs["artwork_height_in"],
+		"si_border_in": inputs["border_in"],
+		"si_time_minutes": inputs["time_minutes"],
+		"si_ink_cost_per_sq_in": inputs["ink_cost_per_sq_in"],
+		"si_paper_cost_per_sq_in": inputs["paper_cost_per_sq_in"],
+		"si_cost_override": cint(result["cost_was_overridden"]),
+		"si_cost_source": json.dumps(result["cost_source"], sort_keys=True, separators=(",", ":")),
+		"si_estimated_stock_qty": consumption["quantity"],
+		"si_estimated_stock_uom": consumption["uom"],
+		"si_internal_cost": calculation["total_cost"],
+		"si_gross_margin_pct": calculation["gross_margin_pct"],
+		"si_formula_version": calculation["formula_version"],
+		"si_pricing_model": model.get("name") if model else None,
+		"si_pricing_model_revision": model.get("revision") if model else None,
+		"si_calculation_snapshot": result["snapshot"],
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def create_estimate(payload: dict | str, crm_deal: str) -> dict[str, str]:
+	_check_pricing_permission()
+	if not frappe.has_permission("Quotation", ptype="create"):
+		frappe.throw(_("You do not have permission to create an Estimate."), frappe.PermissionError)
+	if not crm_deal:
+		frappe.throw(
+			_("Open the calculator from an Estimate Request before creating an Estimate."),
+			frappe.ValidationError,
+		)
+	try:
+		result = _calculation_payload(_payload(payload))
+	except DomainError as error:
+		_throw_domain(error)
+		raise
+	quotation = frappe.get_doc(
+		{
+			"doctype": "Quotation",
+			**_deal_quote_context(crm_deal),
+			"items": [_calculated_estimate_item(result)],
+		}
+	).insert()
+	return {
+		"name": quotation.name,
+		"url": quotation.get_url(),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def get_quotation_url(crm_deal: str) -> str:
+	params = _deal_quote_context(crm_deal)
 	query = urlencode({key: value for key, value in params.items() if value})
 	return f"{get_url_to_list('Quotation')}/new?{query}"
