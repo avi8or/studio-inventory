@@ -75,13 +75,6 @@ class PricingApiAccessTests(unittest.TestCase):
 		module, _frappe = self.load_module()
 		module._paper_options = lambda: [
 			{
-				"name": "P-BC-17M-GLOSS-360-R-17",
-				"item_name": "Breathing Color — 17M Gloss — 360 GSM — 17 in roll",
-				"brand": "Breathing Color",
-				"stock_uom": "Foot",
-				"variant_of": "T-BC-17M-GLOSS-360-R",
-			},
-			{
 				"name": "P-BC-17M-GLOSS-360-R-24",
 				"item_name": "Breathing Color — 17M Gloss — 360 GSM — 24 in roll",
 				"brand": "Breathing Color",
@@ -95,6 +88,20 @@ class PricingApiAccessTests(unittest.TestCase):
 				"stock_uom": "Sheet",
 				"variant_of": "T-BC-17M-GLOSS-360-S",
 			},
+			{
+				"name": "P-BC-17M-GLOSS-360-R-17",
+				"item_name": "Breathing Color — 17M Gloss — 360 GSM — 17 in roll",
+				"brand": "Breathing Color",
+				"stock_uom": "Foot",
+				"variant_of": "T-BC-17M-GLOSS-360-R",
+			},
+			{
+				"name": "P-BC-17M-GLOSS-360-S-8.5X11",
+				"item_name": "Breathing Color — 17M Gloss — 360 GSM — 8.5 × 11 in",
+				"brand": "Breathing Color",
+				"stock_uom": "Sheet",
+				"variant_of": "T-BC-17M-GLOSS-360-S",
+			},
 		]
 
 		catalog = module._paper_catalog()
@@ -103,14 +110,20 @@ class PricingApiAccessTests(unittest.TestCase):
 		self.assertEqual(catalog[0]["label"], "Breathing Color — 17M Gloss — 360 GSM")
 		self.assertEqual(
 			[variant["label"] for variant in catalog[0]["variants"]],
-			["Roll · 17 in", "Roll · 24 in", "Sheet · 13 × 19 in"],
+			[
+				"Sheet · 8.5 × 11 in",
+				"Sheet · 13 × 19 in",
+				"Roll · 17 in",
+				"Roll · 24 in",
+			],
 		)
 		self.assertEqual(
 			[variant["name"] for variant in catalog[0]["variants"]],
 			[
+				"P-BC-17M-GLOSS-360-S-8.5X11",
+				"P-BC-17M-GLOSS-360-S-13X19",
 				"P-BC-17M-GLOSS-360-R-17",
 				"P-BC-17M-GLOSS-360-R-24",
-				"P-BC-17M-GLOSS-360-S-13X19",
 			],
 		)
 

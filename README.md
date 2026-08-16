@@ -33,8 +33,9 @@ The calculator extends the native ERPNext Quotation form, displayed to users
 as **Estimate**. Choose **Add > Add
 Calculated Print**, then select a paper type followed by its stocked size/form,
 dimensions, border, quantity, ink cost, and production time. The chosen
-size/form remains the exact ERPNext Paper Item variant used for costing and
-inventory. The server
+size/form list shows sheets in dimensional order followed by rolls in width
+order. The chosen size/form remains the exact ERPNext Paper Item variant used
+for costing and inventory. The server
 calculates the unit rate, internal cost, margin, physical fit, and estimated
 Sheet or Foot consumption. The resulting row remains a normal Quotation Item,
 so ERPNext continues to own taxes, discounts, terms, printing, amendments, and

@@ -337,6 +337,21 @@ def _paper_options() -> list[dict[str, Any]]:
 	)
 
 
+def _paper_variant_sort_key(variant: dict[str, Any]) -> tuple[Any, ...]:
+	stock_uom = str(variant.get("stock_uom") or "")
+	label = str(variant.get("label") or "")
+	size_label = label.partition(" · ")[2]
+	form_order = 0 if stock_uom == "Sheet" else 1
+	try:
+		dimensions = parse_paper_dimensions(stock_uom=stock_uom, attribute_value=size_label)
+	except DomainError:
+		return form_order, float("inf"), float("inf"), label.casefold()
+	if dimensions.height_in is not None:
+		short_side, long_side = sorted((dimensions.width_in, dimensions.height_in))
+		return form_order, short_side, long_side, label.casefold()
+	return form_order, dimensions.width_in, 0, label.casefold()
+
+
 def _paper_catalog() -> list[dict[str, Any]]:
 	families: dict[str, dict[str, Any]] = {}
 	for item in _paper_options():
@@ -365,6 +380,8 @@ def _paper_catalog() -> list[dict[str, Any]]:
 				"label": f"{form_label} · {size_label}",
 			}
 		)
+	for family in families.values():
+		family["variants"].sort(key=_paper_variant_sort_key)
 	return sorted(families.values(), key=lambda family: family["label"].casefold())
 
 
