@@ -20,7 +20,7 @@ const props = defineProps({
   estimateRequest: { type: String, default: "" },
 });
 
-const RECENT_PAPER_KEY = "studio-inventory:recent-paper-items";
+const RECENT_PAPER_KEY = "studio-inventory:recent-paper-families";
 const RECENT_PAPER_LIMIT = 5;
 const SIZE_PRESETS = [
   { label: "8 × 10", width: 8, height: 10 },
@@ -44,13 +44,15 @@ const paperOpen = ref(false);
 const activePaperIndex = ref(0);
 const paperOptionLimit = ref(PAPER_OPTION_LIMIT);
 const recentPaperNames = ref([]);
+const paperFamilyKey = ref("");
 const resultStale = ref(false);
 const resultBreakdownOpen = ref(false);
 const internalCostingOpen = ref(false);
 let suppressNextPaperOpen = false;
 
 const validationErrors = reactive({
-  paper: "",
+  paper_family: "",
+  paper_variant: "",
   artwork_width: "",
   artwork_height: "",
   border: "",
@@ -72,18 +74,28 @@ const form = reactive({
   cost_override: null,
 });
 
-const selectedPaper = computed(() =>
-  context.value?.paper_items?.find((item) => item.name === form.paper_item),
-);
+const paperFamilies = computed(() => context.value?.paper_catalog || []);
+const selectedPaperFamily = computed(() => (
+  paperFamilies.value.find((family) => family.key === paperFamilyKey.value)
+));
+const selectedPaper = computed(() => (
+  selectedPaperFamily.value?.variants.find((item) => item.name === form.paper_item)
+));
 
-const paperSearchIndex = computed(() => buildPaperSearchIndex(context.value?.paper_items));
+const paperSearchIndex = computed(() => buildPaperSearchIndex(
+  paperFamilies.value.map((family) => ({
+    ...family,
+    name: family.key,
+    item_name: family.label,
+  })),
+));
 const trimmedPaperQuery = computed(() => paperQuery.value.trim());
 const showingRecentPapers = computed(() => !trimmedPaperQuery.value);
 const paperSearchReady = computed(() => trimmedPaperQuery.value.length >= 2);
 const recentPaperOptions = computed(() => {
-  const items = context.value?.paper_items || [];
+  const items = paperFamilies.value;
   return recentPaperNames.value
-    .map((name) => items.find((item) => item.name === name))
+    .map((name) => items.find((item) => item.key === name))
     .filter(Boolean);
 });
 const paperMatches = computed(() => (
@@ -185,7 +197,8 @@ function clearValidationErrors() {
 
 function validationErrorsForForm() {
   const errors = {
-    paper: form.paper_item ? "" : "Choose a paper from the matching results.",
+    paper_family: paperFamilyKey.value ? "" : "Choose a paper type from the matching results.",
+    paper_variant: form.paper_item ? "" : "Choose an available size and form.",
     artwork_width: Number(form.artwork_width_in) > 0 ? "" : "Enter an artwork width greater than 0.",
     artwork_height: Number(form.artwork_height_in) > 0 ? "" : "Enter an artwork height greater than 0.",
     border: Number(form.border_in) >= 0 ? "" : "Border cannot be negative.",
@@ -207,7 +220,8 @@ function applyValidationErrors(errors) {
 
 function focusFirstInvalidField() {
   const fieldIds = {
-    paper: "price-paper-input",
+    paper_family: "price-paper-input",
+    paper_variant: "price-paper-variant",
     artwork_width: "price-artwork-width",
     artwork_height: "price-artwork-height",
     border: "price-border",
@@ -218,7 +232,7 @@ function focusFirstInvalidField() {
   };
   const firstInvalid = Object.keys(validationErrors).find((key) => validationErrors[key]);
   if (!firstInvalid) return;
-  if (firstInvalid === "paper") suppressNextPaperOpen = true;
+  if (firstInvalid === "paper_family") suppressNextPaperOpen = true;
   nextTick(() => document.getElementById(fieldIds[firstInvalid])?.focus());
 }
 
@@ -288,13 +302,19 @@ function openPaperOptions() {
 }
 
 function onPaperInput() {
+  paperFamilyKey.value = "";
   form.paper_item = "";
   paper.value = null;
   error.value = "";
   activePaperIndex.value = 0;
   paperOptionLimit.value = PAPER_OPTION_LIMIT;
   paperOpen.value = true;
-  if (validationErrors.paper) validationErrors.paper = "Choose a paper from the matching results.";
+  if (validationErrors.paper_family) {
+    validationErrors.paper_family = "Choose a paper type from the matching results.";
+  }
+  if (validationErrors.paper_variant) {
+    validationErrors.paper_variant = "Choose an available size and form.";
+  }
 }
 
 function showMorePaperOptions() {
@@ -323,14 +343,18 @@ function movePaperSelection(direction) {
 }
 
 function selectPaper(item, blur = false) {
-  const shouldLoad = form.paper_item !== item.name || (!paper.value && !loadingPaper.value);
-  form.paper_item = item.name;
-  paperQuery.value = item.item_name || item.name;
-  validationErrors.paper = "";
-  rememberPaper(item.name);
+  const changed = paperFamilyKey.value !== item.key;
+  paperFamilyKey.value = item.key;
+  paperQuery.value = item.label;
+  validationErrors.paper_family = "";
+  rememberPaper(item.key);
   paperOpen.value = false;
   if (blur) paperInput.value?.blur();
-  if (shouldLoad) loadPaper();
+  if (changed) {
+    form.paper_item = "";
+    paper.value = null;
+    validationErrors.paper_variant = "";
+  }
 }
 
 function selectActivePaper(event) {
@@ -373,6 +397,11 @@ async function createEstimate() {
   }
 }
 
+function selectPaperVariant() {
+  validationErrors.paper_variant = form.paper_item ? "" : "Choose an available size and form.";
+  loadPaper();
+}
+
 function reset() {
   result.value = null;
   resultStale.value = false;
@@ -380,6 +409,7 @@ function reset() {
   internalCostingOpen.value = false;
   error.value = "";
   clearValidationErrors();
+  paperFamilyKey.value = "";
   form.paper_item = "";
   form.artwork_width_in = null;
   form.artwork_height_in = null;
@@ -439,9 +469,9 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
     <div v-else class="price-workspace">
       <form id="price-calculator-form" class="price-form" novalidate @submit.prevent="calculate">
         <section class="price-section">
-          <div class="price-section-heading"><span>01</span><div><strong>Paper</strong><small>Choose the stock Item whose current buying cost should be used.</small></div></div>
-          <div ref="paperPicker" class="field price-field-wide paper-picker" :class="{ invalid: validationErrors.paper }">
-            <label for="price-paper-input">Paper Item <em class="required-label">Required</em></label>
+          <div class="price-section-heading"><span>01</span><div><strong>Paper</strong><small>Choose the paper type first, then its stocked size and form.</small></div></div>
+          <div ref="paperPicker" class="field price-field-wide paper-picker" :class="{ invalid: validationErrors.paper_family }">
+            <label for="price-paper-input">Paper type <em class="required-label">Required</em></label>
             <div class="paper-combobox">
               <Search class="paper-search-icon" :size="15" aria-hidden="true" />
               <input
@@ -451,7 +481,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
                 type="search"
                 role="combobox"
                 required
-                placeholder="Search brand, paper, finish, size, or Item code"
+                placeholder="Search brand, paper, or finish"
                 autocomplete="off"
                 autocorrect="off"
                 :spellcheck="false"
@@ -459,8 +489,8 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
                 aria-controls="price-paper-options"
                 :aria-expanded="paperOpen"
                 :aria-activedescendant="activePaperOptionId"
-                :aria-invalid="Boolean(validationErrors.paper)"
-                :aria-describedby="validationErrors.paper ? 'price-paper-error' : 'price-paper-help'"
+                :aria-invalid="Boolean(validationErrors.paper_family)"
+                :aria-describedby="validationErrors.paper_family ? 'price-paper-family-error' : 'price-paper-family-help'"
                 @focus="openPaperOptions"
                 @input="onPaperInput"
                 @keydown.down.prevent="movePaperSelection(1)"
@@ -469,23 +499,23 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
                 @keydown.esc.stop="paperOpen = false"
                 @keydown.tab="paperOpen = false"
               />
-              <div v-if="paperOpen" id="price-paper-options" class="paper-options" role="listbox" aria-label="Paper Items">
+              <div v-if="paperOpen" id="price-paper-options" class="paper-options" role="listbox" aria-label="Paper types">
                 <div v-if="showingRecentPapers && visiblePaperOptions.length" class="paper-options-heading">Recent papers</div>
                 <button
                   v-for="(item, index) in visiblePaperOptions"
                   :id="`price-paper-option-${index}`"
-                  :key="item.name"
+                  :key="item.key"
                   class="paper-option"
-                  :class="{ active: index === activePaperIndex, selected: item.name === form.paper_item }"
+                  :class="{ active: index === activePaperIndex, selected: item.key === paperFamilyKey }"
                   type="button"
                   role="option"
                   tabindex="-1"
-                  :aria-selected="item.name === form.paper_item"
+                  :aria-selected="item.key === paperFamilyKey"
                   @mouseenter="activePaperIndex = index"
                   @click="selectPaper(item, true)"
                 >
-                  <span><strong>{{ item.item_name || item.name }}</strong><small>{{ item.name }} · {{ item.stock_uom }}<template v-if="item.brand"> · {{ item.brand }}</template></small></span>
-                  <Check v-if="item.name === form.paper_item" :size="15" aria-hidden="true" />
+                  <span><strong>{{ item.label }}</strong><small><template v-if="item.brand">{{ item.brand }} · </template>{{ item.variants.length }} available {{ item.variants.length === 1 ? "size/form" : "sizes/forms" }}</small></span>
+                  <Check v-if="item.key === paperFamilyKey" :size="15" aria-hidden="true" />
                 </button>
                 <div v-if="!visiblePaperOptions.length && paperSearchReady" class="paper-options-empty" role="status">No papers match “{{ paperQuery }}”.</div>
                 <div v-else-if="!visiblePaperOptions.length" class="paper-options-empty" role="status">Type at least 2 characters to search {{ paperSearchIndex.length }} papers.</div>
@@ -498,10 +528,31 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
                 </div>
               </div>
             </div>
-            <small v-if="validationErrors.paper" id="price-paper-error" class="field-error">{{ validationErrors.paper }}</small>
-            <small v-else-if="selectedPaper" id="price-paper-help" class="field-help">{{ selectedPaper.name }} · {{ selectedPaper.stock_uom }}<template v-if="selectedPaper.brand"> · {{ selectedPaper.brand }}</template></small>
-            <small v-else id="price-paper-help" class="field-help">Choose a matching result to load its current cost.</small>
+            <small v-if="validationErrors.paper_family" id="price-paper-family-error" class="field-error">{{ validationErrors.paper_family }}</small>
+            <small v-else-if="selectedPaperFamily" id="price-paper-family-help" class="field-help">{{ selectedPaperFamily.variants.length }} available {{ selectedPaperFamily.variants.length === 1 ? "size/form" : "sizes/forms" }}</small>
+            <small v-else id="price-paper-family-help" class="field-help">Each paper type appears once; stock sizes are chosen next.</small>
           </div>
+          <label class="field price-field-wide" :class="{ invalid: validationErrors.paper_variant }">
+            <span>Stock size / form <em class="required-label">Required</em></span>
+            <div class="select-wrap">
+              <select
+                id="price-paper-variant"
+                v-model="form.paper_item"
+                required
+                :disabled="!selectedPaperFamily"
+                :aria-invalid="Boolean(validationErrors.paper_variant)"
+                :aria-describedby="validationErrors.paper_variant ? 'price-paper-variant-error' : 'price-paper-variant-help'"
+                @change="selectPaperVariant"
+              >
+                <option value="">{{ selectedPaperFamily ? "Choose an available size / form" : "Choose a paper type first" }}</option>
+                <option v-for="item in selectedPaperFamily?.variants || []" :key="item.name" :value="item.name">{{ item.label }}</option>
+              </select>
+              <ChevronDown :size="14" aria-hidden="true" />
+            </div>
+            <small v-if="validationErrors.paper_variant" id="price-paper-variant-error" class="field-error">{{ validationErrors.paper_variant }}</small>
+            <small v-else-if="selectedPaper" id="price-paper-variant-help" class="field-help">{{ selectedPaper.name }} · stocked in {{ selectedPaper.stock_uom }}</small>
+            <small v-else id="price-paper-variant-help" class="field-help">Select the physical stock Item used for this print.</small>
+          </label>
           <label class="field readonly-field price-field-wide">
             <span>Print service Item</span><div>{{ context.default_print_item }}</div>
           </label>
@@ -573,7 +624,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
             <strong>{{ money(Number(result.calculation.quantity) === 1 ? result.calculation.line_total : result.calculation.list_unit_price) }}</strong>
             <small>{{ Number(result.calculation.quantity) === 1 ? printCount(result.calculation.quantity) : "per print" }}</small>
           </div>
-          <div class="price-result-paper"><span>Paper</span><strong>{{ selectedPaper?.item_name || selectedPaper?.name || form.paper_item }}</strong></div>
+          <div class="price-result-paper"><span>Paper</span><strong>{{ selectedPaperFamily?.label || "" }} · {{ selectedPaper?.label || form.paper_item }}</strong></div>
           <div v-if="Number(result.calculation.quantity) > 1" class="price-total-card"><span>Line total · {{ printCount(result.calculation.quantity) }}</span><strong>{{ money(result.calculation.line_total) }}</strong></div>
           <section class="price-result-section">
             <h3>Production estimate</h3>

@@ -17,7 +17,9 @@ async function call_pricing(method, args = {}) {
 }
 
 async function get_pricing_context() {
-	if (!pricing_context) pricing_context = await call_pricing("get_pricing_context");
+	if (!pricing_context) {
+		pricing_context = await call_pricing("get_pricing_context", { include_paper_items: 1 });
+	}
 	return pricing_context;
 }
 
@@ -74,6 +76,10 @@ async function open_print_calculator(frm) {
 		});
 		return;
 	}
+	const paper_family = (label) => context.paper_catalog.find((family) => family.label === label);
+	const paper_variant = (family_label, variant_label) => (
+		paper_family(family_label)?.variants.find((variant) => variant.label === variant_label)
+	);
 
 	const dialog = new frappe.ui.Dialog({
 		title: __("Add Calculated Print"),
@@ -88,16 +94,35 @@ async function open_print_calculator(frm) {
 				get_query: () => ({ filters: { disabled: 0, is_sales_item: 1, has_variants: 0 } }),
 			},
 			{
-				fieldname: "paper_item",
-				fieldtype: "Link",
-				options: "Item",
-				label: __("Paper"),
+				fieldname: "paper_family",
+				fieldtype: "Autocomplete",
+				options: context.paper_catalog.map((family) => family.label),
+				label: __("Paper type"),
 				reqd: 1,
-				get_query: () => ({
-					query: "studio_inventory.pricing_api.search_paper_items",
-				}),
 				onchange: async () => {
-					const item_code = dialog.get_value("paper_item");
+					const family = paper_family(dialog.get_value("paper_family"));
+					dialog.set_value("paper_variant", "");
+					dialog.set_df_property(
+						"paper_variant",
+						"options",
+						["", ...(family?.variants || []).map((variant) => variant.label)],
+					);
+					dialog.get_field("cost_status").$wrapper.empty();
+				},
+			},
+			{
+				fieldname: "paper_variant",
+				fieldtype: "Select",
+				options: [""],
+				label: __("Stock size / form"),
+				reqd: 1,
+				description: __("Choose the physical stock Item used for this print."),
+				onchange: async () => {
+					const variant = paper_variant(
+						dialog.get_value("paper_family"),
+						dialog.get_value("paper_variant"),
+					);
+					const item_code = variant?.name;
 					if (!item_code) return;
 					try {
 						const paper = await call_pricing("get_paper_cost", { item_code });
@@ -138,8 +163,13 @@ async function open_print_calculator(frm) {
 		primary_action_label: __("Add to Estimate"),
 		primary_action: async (values) => {
 			try {
-				const result = await call_pricing("calculate_print", { payload: values });
-				await add_calculated_row(frm, values, result);
+				const variant = paper_variant(values.paper_family, values.paper_variant);
+				if (!variant) throw new Error(__("Choose an available paper size and form."));
+				const payload = { ...values, paper_item: variant.name };
+				delete payload.paper_family;
+				delete payload.paper_variant;
+				const result = await call_pricing("calculate_print", { payload });
+				await add_calculated_row(frm, payload, result);
 				dialog.hide();
 				frappe.show_alert({
 					message: __("Calculated print added at {0} each", [money(result.calculation.list_unit_price, frm.doc.currency)]),
@@ -160,7 +190,12 @@ async function open_print_calculator(frm) {
 		const values = dialog.get_values();
 		if (!values) return;
 		try {
-			const result = await call_pricing("calculate_print", { payload: values });
+			const variant = paper_variant(values.paper_family, values.paper_variant);
+			if (!variant) throw new Error(__("Choose an available paper size and form."));
+			const payload = { ...values, paper_item: variant.name };
+			delete payload.paper_family;
+			delete payload.paper_variant;
+			const result = await call_pricing("calculate_print", { payload });
 			dialog.get_field("preview").$wrapper.html(preview_html(result, frm.doc.currency));
 		} catch (error) {
 			dialog.get_field("preview").$wrapper.html(`<div class="text-danger">${frappe.utils.escape_html(error_message(error))}</div>`);

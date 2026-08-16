@@ -2323,6 +2323,7 @@ select:disabled {
   }
 
   .price-page .field input,
+  .price-page .field select,
   .price-page .readonly-field > div {
     min-height: 44px;
   }

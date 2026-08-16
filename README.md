@@ -31,15 +31,17 @@ consumption estimate as calculated Estimate rows.
 
 The calculator extends the native ERPNext Quotation form, displayed to users
 as **Estimate**. Choose **Add > Add
-Calculated Print**, then select a sellable print Item, a Paper Item variant,
-dimensions, border, quantity, ink cost, and production time. The server
+Calculated Print**, then select a paper type followed by its stocked size/form,
+dimensions, border, quantity, ink cost, and production time. The chosen
+size/form remains the exact ERPNext Paper Item variant used for costing and
+inventory. The server
 calculates the unit rate, internal cost, margin, physical fit, and estimated
 Sheet or Foot consumption. The resulting row remains a normal Quotation Item,
 so ERPNext continues to own taxes, discounts, terms, printing, amendments, and
 Sales Order conversion. Sales Order is displayed as **Client Order**; no
 separate job or fulfillment ledger is created.
 
-Paper search ignores accents, trademark symbols, punctuation, and word order;
+Paper-type search ignores accents, trademark symbols, punctuation, and word order;
 it also tolerates partial words, small misspellings, and an extra descriptive
 term when the remaining terms identify a strong catalog match.
 

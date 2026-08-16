@@ -68,7 +68,51 @@ class PricingApiAccessTests(unittest.TestCase):
 		self.assertEqual(module._paper_options(), [])
 		self.assertEqual(captured["doctype"], "Item")
 		self.assertEqual(captured["filters"]["stock_uom"], ["in", ["Sheet", "Foot"]])
+		self.assertIn("variant_of", captured["fields"])
 		self.assertEqual(captured["limit_page_length"], 0)
+
+	def test_paper_catalog_groups_stock_variants_under_one_paper_family(self):
+		module, _frappe = self.load_module()
+		module._paper_options = lambda: [
+			{
+				"name": "P-BC-17M-GLOSS-360-R-17",
+				"item_name": "Breathing Color — 17M Gloss — 360 GSM — 17 in roll",
+				"brand": "Breathing Color",
+				"stock_uom": "Foot",
+				"variant_of": "T-BC-17M-GLOSS-360-R",
+			},
+			{
+				"name": "P-BC-17M-GLOSS-360-R-24",
+				"item_name": "Breathing Color — 17M Gloss — 360 GSM — 24 in roll",
+				"brand": "Breathing Color",
+				"stock_uom": "Foot",
+				"variant_of": "T-BC-17M-GLOSS-360-R",
+			},
+			{
+				"name": "P-BC-17M-GLOSS-360-S-13X19",
+				"item_name": "Breathing Color — 17M Gloss — 360 GSM — 13 × 19 in",
+				"brand": "Breathing Color",
+				"stock_uom": "Sheet",
+				"variant_of": "T-BC-17M-GLOSS-360-S",
+			},
+		]
+
+		catalog = module._paper_catalog()
+
+		self.assertEqual(len(catalog), 1)
+		self.assertEqual(catalog[0]["label"], "Breathing Color — 17M Gloss — 360 GSM")
+		self.assertEqual(
+			[variant["label"] for variant in catalog[0]["variants"]],
+			["Roll · 17 in", "Roll · 24 in", "Sheet · 13 × 19 in"],
+		)
+		self.assertEqual(
+			[variant["name"] for variant in catalog[0]["variants"]],
+			[
+				"P-BC-17M-GLOSS-360-R-17",
+				"P-BC-17M-GLOSS-360-R-24",
+				"P-BC-17M-GLOSS-360-S-13X19",
+			],
+		)
 
 	def test_estimate_paper_search_uses_forgiving_ranked_results(self):
 		module, _frappe = self.load_module()
@@ -112,15 +156,15 @@ class PricingApiAccessTests(unittest.TestCase):
 		module._company = lambda _settings: "Lightpress"
 		module._paper_cost_price_list = lambda _settings: "Standard Buying"
 		module._can_override_cost = lambda: False
-		module._paper_options = lambda: paper_calls.append(True) or [{"name": "PAPER-001"}]
+		module._paper_catalog = lambda: paper_calls.append(True) or [{"key": "PAPER-001"}]
 		frappe.db = types.SimpleNamespace(get_value=lambda *_args: "USD")
 
 		quotation_context = module.get_pricing_context()
-		self.assertNotIn("paper_items", quotation_context)
+		self.assertNotIn("paper_catalog", quotation_context)
 		self.assertEqual(paper_calls, [])
 
 		standalone_context = module.get_pricing_context(include_paper_items=True)
-		self.assertEqual(standalone_context["paper_items"], [{"name": "PAPER-001"}])
+		self.assertEqual(standalone_context["paper_catalog"], [{"key": "PAPER-001"}])
 		self.assertEqual(paper_calls, [True])
 
 	def test_cost_basis_serializes_last_verified_date(self):

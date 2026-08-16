@@ -331,10 +331,41 @@ def _paper_options() -> list[dict[str, Any]]:
 			"has_variants": 0,
 			"stock_uom": ["in", list(PAPER_ATTRIBUTE_BY_UOM)],
 		},
-		fields=["name", "item_name", "stock_uom", "brand"],
+		fields=["name", "item_name", "stock_uom", "brand", "variant_of"],
 		order_by="item_name asc",
 		limit_page_length=0,
 	)
+
+
+def _paper_catalog() -> list[dict[str, Any]]:
+	families: dict[str, dict[str, Any]] = {}
+	for item in _paper_options():
+		item_name = str(item.get("item_name") or item.get("name") or "")
+		parts = [part.strip() for part in item_name.split(" — ")]
+		family_label = " — ".join(parts[:-1]) if len(parts) >= 4 else item_name
+		size_label = parts[-1] if len(parts) >= 4 else item_name
+		form_label = "Roll" if item.get("stock_uom") == "Foot" else "Sheet"
+		if form_label == "Roll" and size_label.casefold().endswith(" roll"):
+			size_label = size_label[:-5].rstrip()
+		family = families.setdefault(
+			family_label,
+			{
+				"key": family_label,
+				"label": family_label,
+				"brand": item.get("brand"),
+				"variants": [],
+			},
+		)
+		family["variants"].append(
+			{
+				"name": item.get("name"),
+				"item_name": item_name,
+				"stock_uom": item.get("stock_uom"),
+				"variant_of": item.get("variant_of"),
+				"label": f"{form_label} · {size_label}",
+			}
+		)
+	return sorted(families.values(), key=lambda family: family["label"].casefold())
 
 
 @frappe.whitelist()
@@ -528,7 +559,7 @@ def get_pricing_context(include_paper_items: bool = False) -> dict:
 		"can_manage_pricing": bool(PRICING_MANAGER_ROLES.intersection(frappe.get_roles())),
 	}
 	if cint(include_paper_items):
-		context["paper_items"] = _paper_options()
+		context["paper_catalog"] = _paper_catalog()
 	return context
 
 
