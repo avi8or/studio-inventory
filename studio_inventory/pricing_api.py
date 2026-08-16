@@ -11,6 +11,7 @@ from frappe.utils import cint, flt, get_url_to_list, getdate, nowdate
 
 from studio_inventory.domain import DomainError
 from studio_inventory.permissions import has_pricing_access
+from studio_inventory.paper_search import rank_paper_options
 from studio_inventory.pricing import (
 	FORMULA_VERSION,
 	PaperDimensions,
@@ -334,6 +335,33 @@ def _paper_options() -> list[dict[str, Any]]:
 		order_by="item_name asc",
 		limit_page_length=0,
 	)
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def search_paper_items(
+	doctype: str,
+	txt: str,
+	searchfield: str,
+	start: int,
+	page_len: int,
+	filters: dict | str | None = None,
+	**_kwargs,
+) -> list[list[str]]:
+	_check_pricing_permission()
+	del doctype, searchfield, filters
+	offset = max(cint(start), 0)
+	limit = min(max(cint(page_len) or 20, 1), 50)
+	matches = rank_paper_options(_paper_options(), txt)
+	return [
+		[
+			str(item.get("name") or ""),
+			str(item.get("item_name") or ""),
+			str(item.get("brand") or ""),
+			str(item.get("stock_uom") or ""),
+		]
+		for item in matches[offset : offset + limit]
+	]
 
 
 def _calculation_payload(data: dict[str, Any], *, settings=None) -> dict[str, Any]:

@@ -437,7 +437,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
                 type="search"
                 role="combobox"
                 required
-                placeholder="Search paper name, Item code, or brand"
+                placeholder="Search brand, paper, finish, size, or Item code"
                 autocomplete="off"
                 autocorrect="off"
                 :spellcheck="false"
