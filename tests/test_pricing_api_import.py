@@ -14,6 +14,7 @@ class PricingApiAccessTests(unittest.TestCase):
 		frappe.__path__ = []
 		frappe._ = lambda value: value
 		frappe.whitelist = lambda **_kwargs: lambda function: function
+		frappe.validate_and_sanitize_search_inputs = lambda function: function
 		frappe.ValidationError = type("ValidationError", (Exception,), {})
 		frappe.PermissionError = type("PermissionError", (Exception,), {})
 		frappe.session = types.SimpleNamespace(user="pricing@example.com")
@@ -68,6 +69,36 @@ class PricingApiAccessTests(unittest.TestCase):
 		self.assertEqual(captured["doctype"], "Item")
 		self.assertEqual(captured["filters"]["stock_uom"], ["in", ["Sheet", "Foot"]])
 		self.assertEqual(captured["limit_page_length"], 0)
+
+	def test_estimate_paper_search_uses_forgiving_ranked_results(self):
+		module, _frappe = self.load_module()
+		module._check_pricing_permission = lambda: None
+		module._paper_options = lambda: [
+			{
+				"name": "HAH-TORCHON",
+				"item_name": "Hahnemühle — Torchon — 285 GSM",
+				"brand": "Hahnemühle",
+				"stock_uom": "Sheet",
+			},
+			{
+				"name": "HAH-PHOTO-RAG-BARYTA",
+				"item_name": "Hahnemühle — Photo Rag® Baryta — 315 GSM",
+				"brand": "Hahnemühle",
+				"stock_uom": "Sheet",
+			},
+		]
+
+		matches = module.search_paper_items(
+			"Item",
+			"Hahnemuhle matte baryta",
+			"name",
+			0,
+			20,
+			{},
+			reference_doctype="Quotation",
+		)
+
+		self.assertEqual(matches[0][0], "HAH-PHOTO-RAG-BARYTA")
 
 	def test_only_standalone_context_queries_paper_items(self):
 		module, frappe = self.load_module()

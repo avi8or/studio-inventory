@@ -94,7 +94,7 @@ async function open_print_calculator(frm) {
 				label: __("Paper"),
 				reqd: 1,
 				get_query: () => ({
-					filters: { disabled: 0, is_stock_item: 1, has_variants: 0, stock_uom: ["in", ["Sheet", "Foot"]] },
+					query: "studio_inventory.pricing_api.search_paper_items",
 				}),
 				onchange: async () => {
 					const item_code = dialog.get_value("paper_item");

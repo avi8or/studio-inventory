@@ -39,6 +39,10 @@ so ERPNext continues to own taxes, discounts, terms, printing, amendments, and
 Sales Order conversion. Sales Order is displayed as **Client Order**; no
 separate job or fulfillment ledger is created.
 
+Paper search ignores accents, trademark symbols, punctuation, and word order;
+it also tolerates partial words, small misspellings, and an extra descriptive
+term when the remaining terms identify a strong catalog match.
+
 The customer-facing base rate uses the finished print and the smallest costed
 Item variant in the selected paper's native Item-template family that can fit
 it, not the width of the loaded roll. Internal paper cost and margin use the
