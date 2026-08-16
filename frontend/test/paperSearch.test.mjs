@@ -61,14 +61,21 @@ test("paper search treats common dimension notation as equivalent", () => {
   assert.equal(searchPaperOptions(index, "13 x 19").options[0].name, "PAPER-13X19");
 });
 
-test("paper search reports every match but bounds the rendered result set", () => {
+test("paper search reports every match and supports incremental rendering", () => {
   const papers = Array.from({ length: PAPER_OPTION_LIMIT + 15 }, (_, index) => ({
     name: `PAPER-${index}`,
     item_name: `Paper ${index}`,
   }));
 
   const result = searchPaperOptions(buildPaperSearchIndex(papers), "paper");
+  const expanded = searchPaperOptions(
+    buildPaperSearchIndex(papers),
+    "paper",
+    PAPER_OPTION_LIMIT * 2,
+  );
 
   assert.equal(result.total, papers.length);
   assert.equal(result.options.length, PAPER_OPTION_LIMIT);
+  assert.equal(expanded.total, papers.length);
+  assert.equal(expanded.options.length, papers.length);
 });

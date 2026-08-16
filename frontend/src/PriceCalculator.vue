@@ -14,7 +14,7 @@ import {
   Search,
   X,
 } from "@lucide/vue";
-import { buildPaperSearchIndex, searchPaperOptions } from "./paperSearch.js";
+import { PAPER_OPTION_LIMIT, buildPaperSearchIndex, searchPaperOptions } from "./paperSearch.js";
 
 const props = defineProps({
   estimateRequest: { type: String, default: "" },
@@ -42,6 +42,7 @@ const paperPicker = ref(null);
 const paperInput = ref(null);
 const paperOpen = ref(false);
 const activePaperIndex = ref(0);
+const paperOptionLimit = ref(PAPER_OPTION_LIMIT);
 const recentPaperNames = ref([]);
 const resultStale = ref(false);
 const resultBreakdownOpen = ref(false);
@@ -87,11 +88,15 @@ const recentPaperOptions = computed(() => {
 });
 const paperMatches = computed(() => (
   paperSearchReady.value
-    ? searchPaperOptions(paperSearchIndex.value, trimmedPaperQuery.value)
+    ? searchPaperOptions(paperSearchIndex.value, trimmedPaperQuery.value, paperOptionLimit.value)
     : { options: [], total: 0 }
 ));
 const visiblePaperOptions = computed(() => (
   showingRecentPapers.value ? recentPaperOptions.value : paperMatches.value.options
+));
+const remainingPaperMatchCount = computed(() => Math.min(
+  PAPER_OPTION_LIMIT,
+  Math.max(paperMatches.value.total - paperMatches.value.options.length, 0),
 ));
 const activePaperOptionId = computed(() => (
   paperOpen.value && visiblePaperOptions.value.length
@@ -287,8 +292,16 @@ function onPaperInput() {
   paper.value = null;
   error.value = "";
   activePaperIndex.value = 0;
+  paperOptionLimit.value = PAPER_OPTION_LIMIT;
   paperOpen.value = true;
   if (validationErrors.paper) validationErrors.paper = "Choose a paper from the matching results.";
+}
+
+function showMorePaperOptions() {
+  paperOptionLimit.value = Math.min(
+    paperOptionLimit.value + PAPER_OPTION_LIMIT,
+    paperMatches.value.total,
+  );
 }
 
 function closePaperOptions(event) {
@@ -376,6 +389,7 @@ function reset() {
   form.cost_override = null;
   form.ink_cost_per_sq_in = context.value?.ink_cost_per_sq_in ?? null;
   paperQuery.value = "";
+  paperOptionLimit.value = PAPER_OPTION_LIMIT;
   paperOpen.value = false;
   paper.value = null;
 }
@@ -477,7 +491,10 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", closePaperOpti
                 <div v-else-if="!visiblePaperOptions.length" class="paper-options-empty" role="status">Type at least 2 characters to search {{ paperSearchIndex.length }} papers.</div>
                 <div v-if="showingRecentPapers && visiblePaperOptions.length" class="paper-options-limit">Recent papers · type to search the full catalog.</div>
                 <div v-else-if="paperMatches.total > visiblePaperOptions.length" class="paper-options-limit">
-                  Showing {{ visiblePaperOptions.length }} of {{ paperMatches.total }} matches. Type more to narrow the list.
+                  <span aria-live="polite">Showing {{ visiblePaperOptions.length }} of {{ paperMatches.total }} matches.</span>
+                  <button class="paper-options-more" type="button" @click.stop="showMorePaperOptions">
+                    Show {{ remainingPaperMatchCount }} more
+                  </button>
                 </div>
               </div>
             </div>

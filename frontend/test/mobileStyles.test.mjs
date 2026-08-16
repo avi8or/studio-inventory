@@ -64,11 +64,13 @@ test("the calculator includes size shortcuts and a tighter desktop result layout
   assert.match(stylesheet, /\.filter-row\.price-heading \{[\s\S]*?flex-direction: row;/);
 });
 
-test("the price calculator uses a bounded custom paper picker instead of a native datalist", () => {
+test("the price calculator uses a bounded and incrementally expandable custom paper picker", () => {
   assert.doesNotMatch(priceCalculator, /<datalist\b/);
   assert.match(priceCalculator, /role="combobox"/);
   assert.match(priceCalculator, /role="listbox"/);
   assert.match(priceCalculator, /searchPaperOptions/);
+  assert.match(priceCalculator, /function showMorePaperOptions\(\)/);
+  assert.match(priceCalculator, /Show \{\{ remainingPaperMatchCount \}\} more/);
 });
 
 test("paper results and calculator controls have mobile touch targets", () => {
